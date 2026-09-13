@@ -78,6 +78,7 @@
           </div>
           <div id="onlineConnected" class="hidden">
             <p class="online-status-text" id="onlineConnectedText"></p>
+            <button id="addOpponentFriendBtn" class="hidden" type="button">+ Vriend toevoegen</button>
           </div>
           <button id="leaveOnlineBtn" class="hidden">Verlaat online partij</button>
         </div>
@@ -152,6 +153,14 @@
       </div>
       <h3>Laatste partijen</h3>
       <ol id="profileMatchList" class="match-list"></ol>
+
+      <h3>Vrienden</h3>
+      <div class="add-friend-row">
+        <input type="text" id="addFriendInput" placeholder="Gebruikersnaam">
+        <button id="addFriendBtn" type="button">Toevoegen</button>
+      </div>
+      <div id="addFriendError" class="auth-error hidden"></div>
+      <ul id="friendsList" class="friends-list"></ul>
     </div>
   </div>
 

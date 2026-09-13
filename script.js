@@ -3,7 +3,7 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   GoogleAuthProvider, signInWithPopup, signOut,
   linkWithCredential, linkWithPopup, EmailAuthProvider,
-  doc, getDoc, setDoc, updateDoc, onSnapshot,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, addDoc, query, where, getDocs, orderBy, limit,
   arrayUnion, serverTimestamp, runTransaction,
 } from './firebase-config.js';
@@ -701,6 +701,8 @@ let onlineUnsubscribe = null;
 let onlineMyColor = null; // 'w' or 'b'
 let onlineAppliedMoveCount = 0;
 let onlineStatus = 'idle'; // 'idle' | 'waiting' | 'active' | 'finished'
+let onlineOpponentUid = null;
+let onlineOpponentUsername = null;
 
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
@@ -756,6 +758,11 @@ const profileWins = document.getElementById('profileWins');
 const profileLosses = document.getElementById('profileLosses');
 const profileDraws = document.getElementById('profileDraws');
 const profileMatchList = document.getElementById('profileMatchList');
+const addFriendInput = document.getElementById('addFriendInput');
+const addFriendBtn = document.getElementById('addFriendBtn');
+const addFriendError = document.getElementById('addFriendError');
+const friendsList = document.getElementById('friendsList');
+const addOpponentFriendBtn = document.getElementById('addOpponentFriendBtn');
 const replayModal = document.getElementById('replayModal');
 const closeReplayBtn = document.getElementById('closeReplayBtn');
 const replayTitle = document.getElementById('replayTitle');
@@ -1443,10 +1450,12 @@ async function openProfileModal() {
   profileMatchList.innerHTML = '';
   profileModal.classList.remove('hidden');
 
+  friendsList.innerHTML = '';
   try {
     const entries = await fetchMatchHistory(currentUser.uid, MATCH_LIST_LIMIT);
     renderProfileStats(entries);
     renderMatchList(profileMatchList, entries);
+    await loadAndRenderFriends();
   } catch (e) {
     console.error('Kon profiel niet laden', e);
   }
@@ -1512,6 +1521,153 @@ function renderMatchList(listEl, entries) {
 
 profileBtn.addEventListener('click', openProfileModal);
 closeProfileBtn.addEventListener('click', closeProfileModal);
+
+// ==================== Friends ====================
+
+async function findUserByUsername(username) {
+  const q = query(collection(db, 'users'), where('usernameLower', '==', username.toLowerCase()));
+  const snaps = await getDocs(q);
+  if (snaps.empty) return null;
+  const d = snaps.docs[0];
+  return { uid: d.id, ...d.data() };
+}
+
+async function addFriend(friendUid, friendUsername) {
+  if (!currentUser || currentUser.isAnonymous) return;
+  await Promise.all([
+    setDoc(doc(db, 'users', currentUser.uid, 'friends', friendUid), {
+      username: friendUsername,
+      addedAt: serverTimestamp(),
+    }),
+    setDoc(doc(db, 'users', friendUid, 'friends', currentUser.uid), {
+      username: currentUserProfile.username,
+      addedAt: serverTimestamp(),
+    }),
+  ]);
+}
+
+async function fetchFriends() {
+  const snaps = await getDocs(collection(db, 'users', currentUser.uid, 'friends'));
+  return snaps.docs.map((d) => ({ uid: d.id, ...d.data() }));
+}
+
+async function fetchHeadToHead(friendUid) {
+  const q = query(
+    collection(db, 'users', currentUser.uid, 'appliedGames'),
+    where('opponentUid', '==', friendUid)
+  );
+  const snaps = await getDocs(q);
+  const record = { wins: 0, losses: 0, draws: 0 };
+  snaps.docs.forEach((d) => {
+    const r = d.data().result;
+    if (r === 'win') record.wins++;
+    else if (r === 'loss') record.losses++;
+    else if (r === 'draw') record.draws++;
+  });
+  return record;
+}
+
+async function loadAndRenderFriends() {
+  const friends = await fetchFriends();
+  friendsList.innerHTML = '';
+  if (!friends.length) {
+    const li = document.createElement('li');
+    li.className = 'friend-row';
+    li.textContent = 'Nog geen vrienden toegevoegd.';
+    friendsList.appendChild(li);
+    return;
+  }
+  for (const friend of friends) {
+    const li = document.createElement('li');
+    li.className = 'friend-row';
+
+    const name = document.createElement('span');
+    name.className = 'friend-name';
+    name.textContent = friend.username;
+
+    const record = document.createElement('span');
+    record.className = 'friend-record';
+    record.textContent = '…';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Verwijder';
+    removeBtn.addEventListener('click', async () => {
+      await deleteDoc(doc(db, 'users', currentUser.uid, 'friends', friend.uid));
+      loadAndRenderFriends();
+    });
+
+    li.append(name, record, removeBtn);
+    friendsList.appendChild(li);
+
+    fetchHeadToHead(friend.uid).then((r) => {
+      record.textContent = `${r.wins}-${r.losses}-${r.draws}`;
+    });
+  }
+}
+
+addFriendBtn.addEventListener('click', async () => {
+  const username = addFriendInput.value.trim();
+  addFriendError.classList.add('hidden');
+  if (!username) return;
+  addFriendBtn.disabled = true;
+  try {
+    if (username.toLowerCase() === currentUserProfile.usernameLower) {
+      addFriendError.textContent = 'Je kan jezelf niet toevoegen.';
+      addFriendError.classList.remove('hidden');
+      return;
+    }
+    const found = await findUserByUsername(username);
+    if (!found) {
+      addFriendError.textContent = 'Geen gebruiker gevonden met die naam.';
+      addFriendError.classList.remove('hidden');
+      return;
+    }
+    await addFriend(found.uid, found.username);
+    addFriendInput.value = '';
+    await loadAndRenderFriends();
+  } catch (e) {
+    console.error('Kon vriend niet toevoegen', e);
+    addFriendError.textContent = 'Er ging iets mis. Probeer het opnieuw.';
+    addFriendError.classList.remove('hidden');
+  } finally {
+    addFriendBtn.disabled = false;
+  }
+});
+
+addFriendInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') addFriendBtn.click();
+});
+
+async function resolveOnlineOpponent(data) {
+  onlineOpponentUid = onlineMyColor === 'w' ? data.players.b : data.players.w;
+  onlineOpponentUsername = null;
+  addOpponentFriendBtn.classList.add('hidden');
+  if (!onlineOpponentUid || !currentUser || currentUser.isAnonymous) return;
+  try {
+    const snap = await getDoc(doc(db, 'users', onlineOpponentUid));
+    if (!snap.exists()) return; // opponent is a guest — nothing to add
+    onlineOpponentUsername = snap.data().username;
+    const alreadyFriends = await getDoc(doc(db, 'users', currentUser.uid, 'friends', onlineOpponentUid));
+    if (!alreadyFriends.exists()) {
+      addOpponentFriendBtn.classList.remove('hidden');
+    }
+  } catch (e) {
+    console.error('Kon tegenstander niet ophalen', e);
+  }
+}
+
+addOpponentFriendBtn.addEventListener('click', async () => {
+  if (!onlineOpponentUid || !onlineOpponentUsername) return;
+  addOpponentFriendBtn.disabled = true;
+  try {
+    await addFriend(onlineOpponentUid, onlineOpponentUsername);
+    addOpponentFriendBtn.textContent = 'Toegevoegd!';
+  } catch (e) {
+    console.error('Kon vriend niet toevoegen', e);
+  } finally {
+    addOpponentFriendBtn.disabled = false;
+  }
+});
 
 // ==================== Match replay ====================
 
@@ -1701,6 +1857,7 @@ function handleOnlineGameUpdate(data) {
     onlineStatus = 'active';
     onlineConnectedText.textContent = `Verbonden! Jij speelt ${onlineMyColor === 'w' ? 'wit' : 'zwart'}.`;
     showOnlineConnectedPanel();
+    resolveOnlineOpponent(data);
   }
 
   const moves = data.moves || [];
@@ -1827,6 +1984,10 @@ function leaveOnlineGame() {
   onlineMyColor = null;
   onlineAppliedMoveCount = 0;
   onlineStatus = 'idle';
+  onlineOpponentUid = null;
+  onlineOpponentUsername = null;
+  addOpponentFriendBtn.classList.add('hidden');
+  addOpponentFriendBtn.textContent = '+ Vriend toevoegen';
   const url = new URL(window.location.href);
   url.searchParams.delete('game');
   window.history.replaceState({}, '', url.toString());

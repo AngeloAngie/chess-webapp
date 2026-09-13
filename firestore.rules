@@ -69,6 +69,19 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+
+      // Friendship is symmetric and added in one step: adding a friend writes
+      // to both your own list and theirs. A write is allowed either because
+      // it's your own list (uid == you), or because you're writing yourself
+      // (the requester) into someone else's list as their friend.
+      match /friends/{friendUid} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null &&
+          (request.auth.uid == uid || request.auth.uid == friendUid) &&
+          request.resource.data.username is string;
+        allow delete: if request.auth != null && request.auth.uid == uid;
+        allow update: if false;
+      }
     }
 
   }
