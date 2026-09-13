@@ -1182,6 +1182,7 @@ const AUTH_ERROR_MESSAGES_NL = {
   'auth/email-already-in-use': 'Dit e-mailadres is al in gebruik. Probeer in te loggen.',
   'auth/weak-password': 'Wachtwoord moet minstens 6 tekens zijn.',
   'auth/popup-closed-by-user': 'Google-login geannuleerd.',
+  'auth/popup-blocked': 'Je browser blokkeerde het Google-inlogvenster. Sta pop-ups toe voor deze site en probeer opnieuw.',
   'auth/network-request-failed': 'Netwerkfout. Probeer het opnieuw.',
 };
 
