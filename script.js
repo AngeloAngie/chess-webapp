@@ -1187,7 +1187,7 @@ const AUTH_ERROR_MESSAGES_NL = {
 };
 
 function authErrorMessage(e) {
-  return AUTH_ERROR_MESSAGES_NL[e.code] || 'Er ging iets mis. Probeer het opnieuw.';
+  return AUTH_ERROR_MESSAGES_NL[e.code] || `Er ging iets mis (${e.code || e.message}). Probeer het opnieuw.`;
 }
 
 // Handles both real onAuthStateChanged events AND the direct result of a
