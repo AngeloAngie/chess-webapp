@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Chess</h1>
+      <div class="controls">
+        <label class="mode-toggle">
+          <span>Mode</span>
+          <select id="modeSelect">
+            <option value="pvp">Two Player</option>
+            <option value="ai" selected>vs Computer</option>
+            <option value="online">Online</option>
+          </select>
+        </label>
+        <label class="mode-toggle" id="difficultyWrap">
+          <span>Difficulty</span>
+          <select id="difficultySelect">
+            <option value="1">Easy</option>
+            <option value="2" selected>Medium</option>
+            <option value="3">Hard</option>
+          </select>
+        </label>
+        <label class="mode-toggle">
+          <span>Play as</span>
+          <select id="sideSelect">
+            <option value="w" selected>White</option>
+            <option value="b">Black</option>
+          </select>
+        </label>
+        <label class="mode-toggle">
+          <span>Theme</span>
+          <select id="themeSelect">
+            <option value="classic" selected>Classic Wood</option>
+            <option value="emerald">Emerald</option>
+            <option value="midnight">Midnight Neon</option>
+          </select>
+        </label>
+        <button id="newGameBtn">New Game</button>
+        <button id="undoBtn">Undo</button>
+        <button id="redoBtn">Redo</button>
+        <button id="soundBtn" class="icon-btn" title="Toggle sound">🔊</button>
+        <button id="fullscreenBtn" class="icon-btn" title="Toggle fullscreen">⛶</button>
+        <label class="switch-toggle">
+          <input type="checkbox" id="learnModeToggle">
+          <span>Leermodus</span>
+        </label>
+      </div>
+    </header>
+
+    <main>
+      <div class="board-wrap">
+        <div id="onlinePanel" class="online-panel hidden">
+          <div id="onlineIdle">
+            <button id="createInviteBtn">Nodig vriend uit</button>
+          </div>
+          <div id="onlineWaiting" class="hidden">
+            <p>Stuur deze link naar je vriend:</p>
+            <div class="invite-row">
+              <input id="inviteLinkInput" type="text" readonly>
+              <button id="copyInviteBtn">Kopieer</button>
+            </div>
+            <p class="online-status-text">Wachten tot je vriend de link opent…</p>
+          </div>
+          <div id="onlineConnected" class="hidden">
+            <p class="online-status-text" id="onlineConnectedText"></p>
+          </div>
+          <button id="leaveOnlineBtn" class="hidden">Verlaat online partij</button>
+        </div>
+        <div id="status" class="status"></div>
+        <div id="feedbackCard" class="feedback-card hidden">
+          <span id="feedbackBadge" class="feedback-badge"></span>
+          <span id="feedbackText" class="feedback-text"></span>
+        </div>
+        <div id="board" class="board"></div>
+      </div>
+
+      <aside class="side-panel">
+        <div class="captured">
+          <h3>Captured by White</h3>
+          <div id="capturedByWhite" class="captured-pieces"></div>
+        </div>
+        <div class="captured">
+          <h3>Captured by Black</h3>
+          <div id="capturedByBlack" class="captured-pieces"></div>
+        </div>
+        <div class="history">
+          <h3>Moves</h3>
+          <ol id="moveList"></ol>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="promotionOverlay" class="overlay hidden">
+    <div class="promotion-box">
+      <p>Promote pawn to:</p>
+      <div class="promotion-choices" id="promotionChoices"></div>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>

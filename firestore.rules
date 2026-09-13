@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /games/{gameId} {
+      // Both players (and only signed-in users, incl. anonymous/guest) can read a game.
+      allow read: if request.auth != null;
+
+      // Only the host can create a game, and only in the correct "waiting for opponent" shape.
+      allow create: if request.auth != null &&
+        request.resource.data.players.w == request.auth.uid &&
+        request.resource.data.players.b == null &&
+        request.resource.data.status == 'waiting';
+
+      allow update: if request.auth != null && (
+        // Case 1: someone joining an open seat as black. They may only set players.b
+        // to their own uid, and must not touch players.w.
+        (resource.data.players.b == null &&
+         request.resource.data.players.b == request.auth.uid &&
+         request.resource.data.players.w == resource.data.players.w) ||
+
+        // Case 2: one of the two seated players submitting a move / result update.
+        // Neither seat may be reassigned once both are filled.
+        ((resource.data.players.w == request.auth.uid || resource.data.players.b == request.auth.uid) &&
+         request.resource.data.players.w == resource.data.players.w &&
+         request.resource.data.players.b == resource.data.players.b)
+      );
+
+      allow delete: if false;
+    }
+
+  }
+}
