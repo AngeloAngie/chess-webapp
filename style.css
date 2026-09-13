@@ -786,6 +786,114 @@ main {
   align-self: flex-start;
 }
 
+/* ==================== Clocks ==================== */
+
+.clocks {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  max-width: min(88vw, 512px);
+}
+
+.clocks.hidden { display: none; }
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-bg);
+  border-radius: 8px;
+  padding: 6px 14px;
+}
+
+.clock-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.clock-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.clock.ticking {
+  background: var(--accent);
+}
+
+.clock.ticking .clock-label,
+.clock.ticking .clock-time {
+  color: #fff;
+}
+
+.clock.low-time .clock-time {
+  color: #ff6b6b;
+}
+
+/* ==================== Chat ==================== */
+
+.chat-box {
+  margin-top: 10px;
+  background: #1a1a22;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.chat-message {
+  font-size: 0.82rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.chat-message .chat-sender {
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 5px;
+}
+
+.chat-message.own .chat-sender {
+  color: #8ce89a;
+}
+
+.chat-form {
+  display: flex;
+  gap: 6px;
+}
+
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  background: #111117;
+  color: var(--text);
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+}
+
+.chat-form button {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
 /* ==================== Fullscreen mode (game area only) ====================
    Note: each vendor-prefixed :fullscreen variant gets its OWN rule below.
    Combining them in one comma-separated selector list would invalidate the

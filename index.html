@@ -43,6 +43,32 @@
           </select>
         </label>
         <label class="mode-toggle">
+          <span>Tijd</span>
+          <select id="timeControlSelect">
+            <option value="none" selected>Geen tijdslimiet</option>
+            <optgroup label="Bullet">
+              <option value="60000-0">1 min</option>
+              <option value="60000-1000">1 min + 1s</option>
+              <option value="120000-1000">2 min + 1s</option>
+            </optgroup>
+            <optgroup label="Blitz">
+              <option value="180000-0">3 min</option>
+              <option value="180000-2000">3 min + 2s</option>
+              <option value="300000-0">5 min</option>
+              <option value="300000-3000">5 min + 3s</option>
+            </optgroup>
+            <optgroup label="Rapid">
+              <option value="600000-0">10 min</option>
+              <option value="600000-5000">10 min + 5s</option>
+              <option value="900000-10000">15 min + 10s</option>
+            </optgroup>
+            <optgroup label="Classic">
+              <option value="1800000-0">30 min</option>
+              <option value="1800000-20000">30 min + 20s</option>
+            </optgroup>
+          </select>
+        </label>
+        <label class="mode-toggle">
           <span>Theme</span>
           <select id="themeSelect">
             <option value="classic" selected>Classic Wood</option>
@@ -79,8 +105,25 @@
           <div id="onlineConnected" class="hidden">
             <p class="online-status-text" id="onlineConnectedText"></p>
             <button id="addOpponentFriendBtn" class="hidden" type="button">+ Vriend toevoegen</button>
+            <div id="chatBox" class="chat-box">
+              <ol id="chatMessages" class="chat-messages"></ol>
+              <form id="chatForm" class="chat-form">
+                <input type="text" id="chatInput" placeholder="Typ een bericht…" maxlength="300" autocomplete="off">
+                <button type="submit">Stuur</button>
+              </form>
+            </div>
           </div>
           <button id="leaveOnlineBtn" class="hidden">Verlaat online partij</button>
+        </div>
+        <div id="clocks" class="clocks hidden">
+          <div id="clockBlack" class="clock">
+            <span class="clock-label">Zwart</span>
+            <span id="clockBlackTime" class="clock-time">--:--</span>
+          </div>
+          <div id="clockWhite" class="clock">
+            <span class="clock-label">Wit</span>
+            <span id="clockWhiteTime" class="clock-time">--:--</span>
+          </div>
         </div>
         <div id="status" class="status"></div>
         <div id="feedbackCard" class="feedback-card hidden">

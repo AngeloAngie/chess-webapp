@@ -703,6 +703,13 @@ let onlineAppliedMoveCount = 0;
 let onlineStatus = 'idle'; // 'idle' | 'waiting' | 'active' | 'finished'
 let onlineOpponentUid = null;
 let onlineOpponentUsername = null;
+let chatRenderedCount = 0;
+
+// Time controls
+let timeControl = null; // { baseMs, incMs } | null (no limit)
+let clockMs = { w: 0, b: 0 };
+let clockInterval = null;
+let lastTickTs = 0;
 
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
@@ -716,6 +723,16 @@ const difficultySelect = document.getElementById('difficultySelect');
 const difficultyWrap = document.getElementById('difficultyWrap');
 const sideSelect = document.getElementById('sideSelect');
 const themeSelect = document.getElementById('themeSelect');
+const timeControlSelect = document.getElementById('timeControlSelect');
+const clocksEl = document.getElementById('clocks');
+const clockWhiteEl = document.getElementById('clockWhite');
+const clockBlackEl = document.getElementById('clockBlack');
+const clockWhiteTime = document.getElementById('clockWhiteTime');
+const clockBlackTime = document.getElementById('clockBlackTime');
+const chatBox = document.getElementById('chatBox');
+const chatMessagesEl = document.getElementById('chatMessages');
+const chatForm = document.getElementById('chatForm');
+const chatInput = document.getElementById('chatInput');
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
 const soundBtn = document.getElementById('soundBtn');
@@ -1043,6 +1060,10 @@ function finalizeMove(move) {
     else game.capturedByBlack.push(result.captured);
   }
 
+  if (timeControl) {
+    clockMs[mover] += timeControl.incMs;
+  }
+
   const nextLegal = generateLegalMoves(game);
   const inCheckNow = isInCheck(game, game.turn);
   let notation = toAlgebraic({ board: result.board }, move, legalBefore);
@@ -1061,6 +1082,7 @@ function finalizeMove(move) {
 
   if (isCheckmate || isStalemate) {
     gameOver = true;
+    stopClockTick();
     if (isCheckmate) {
       const winner = mover === 'w' ? 'White' : 'Black';
       statusEl.textContent = `Checkmate — ${winner} wins`;
@@ -1074,7 +1096,10 @@ function finalizeMove(move) {
     }
   } else {
     playMoveSoundFor(move, result, inCheckNow);
+    startClockTick();
   }
+
+  renderClocks();
 
   if (learnMode) {
     showMoveFeedback(gameBeforeMove, move, plyNumber);
@@ -1129,6 +1154,10 @@ function resetLocalBoard() {
   initBoardDOM();
   renderMoveList();
   renderBoard(false);
+  setupClocks();
+  if (mode !== 'online' && timeControl) {
+    startClockTick();
+  }
 }
 
 function newGame() {
@@ -1171,6 +1200,127 @@ function redo() {
   renderMoveList();
   renderBoard(false);
 }
+
+// ==================== Time controls & clocks ====================
+
+function parseTimeControlValue(value) {
+  if (!value || value === 'none') return null;
+  const [base, inc] = value.split('-').map(Number);
+  return { baseMs: base, incMs: inc };
+}
+
+function formatClock(ms) {
+  if (ms <= 0) return '0:00';
+  const totalSeconds = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function setupClocks() {
+  stopClockTick();
+  if (!timeControl) {
+    clocksEl.classList.add('hidden');
+    return;
+  }
+  clockMs.w = timeControl.baseMs;
+  clockMs.b = timeControl.baseMs;
+  clocksEl.classList.remove('hidden');
+  renderClocks();
+}
+
+function renderClocks() {
+  if (!timeControl) return;
+  clockWhiteTime.textContent = formatClock(clockMs.w);
+  clockBlackTime.textContent = formatClock(clockMs.b);
+  clockWhiteEl.classList.toggle('ticking', game.turn === 'w' && !gameOver);
+  clockBlackEl.classList.toggle('ticking', game.turn === 'b' && !gameOver);
+  clockWhiteEl.classList.toggle('low-time', clockMs.w < 30000);
+  clockBlackEl.classList.toggle('low-time', clockMs.b < 30000);
+}
+
+function startClockTick() {
+  if (!timeControl || gameOver) return;
+  stopClockTick();
+  lastTickTs = Date.now();
+  clockInterval = setInterval(() => {
+    const now = Date.now();
+    const elapsed = now - lastTickTs;
+    lastTickTs = now;
+    const turnColor = game.turn;
+    clockMs[turnColor] = Math.max(0, clockMs[turnColor] - elapsed);
+    renderClocks();
+    if (clockMs[turnColor] <= 0) {
+      handleTimeOut(turnColor);
+    }
+  }, 250);
+}
+
+function stopClockTick() {
+  if (clockInterval) {
+    clearInterval(clockInterval);
+    clockInterval = null;
+  }
+}
+
+function handleTimeOut(colorThatRanOut) {
+  if (gameOver) return;
+  stopClockTick();
+  gameOver = true;
+  const winner = colorThatRanOut === 'w' ? 'Black' : 'White';
+  statusEl.textContent = `Tijd verstreken — ${winner} wint`;
+  playGameOverSound('checkmate');
+  renderClocks();
+  if (mode === 'online') {
+    markOnlineGameFinished(colorThatRanOut === 'w' ? 'timeout-b' : 'timeout-w');
+  }
+}
+
+timeControlSelect.addEventListener('change', () => {
+  timeControl = parseTimeControlValue(timeControlSelect.value);
+});
+
+// ==================== Chat ====================
+
+function resetChatUI() {
+  chatRenderedCount = 0;
+  chatMessagesEl.innerHTML = '';
+}
+
+function renderChatMessage(msg) {
+  const li = document.createElement('li');
+  li.className = 'chat-message' + (msg.senderUid === currentUser?.uid ? ' own' : '');
+  const sender = document.createElement('span');
+  sender.className = 'chat-sender';
+  sender.textContent = msg.name + ':';
+  li.appendChild(sender);
+  li.appendChild(document.createTextNode(' ' + msg.text));
+  chatMessagesEl.appendChild(li);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+async function sendChatMessage(text) {
+  if (!onlineGameId || !text.trim()) return;
+  try {
+    await updateDoc(gameDocRef(onlineGameId), {
+      chat: arrayUnion({
+        senderUid: currentUser.uid,
+        name: getMyDisplayName(),
+        text: text.trim().slice(0, 300),
+        at: Date.now(),
+      }),
+    });
+  } catch (e) {
+    console.error('Kon bericht niet versturen', e);
+  }
+}
+
+chatForm.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const text = chatInput.value;
+  chatInput.value = '';
+  sendChatMessage(text);
+});
 
 // ==================== Authentication ====================
 
@@ -1797,11 +1947,14 @@ async function createOnlineGame() {
   createInviteBtn.disabled = true;
   try {
     const user = await ensureAuth();
+    timeControl = parseTimeControlValue(timeControlSelect.value);
     const newDocRef = await addDoc(collection(db, 'games'), {
       hostUid: user.uid,
       players: { w: user.uid, b: null },
       displayNames: { w: getMyDisplayName(), b: null },
+      timeControl,
       moves: [],
+      chat: [],
       status: 'waiting',
       result: null,
       createdAt: serverTimestamp(),
@@ -1812,6 +1965,7 @@ async function createOnlineGame() {
     url.searchParams.set('game', onlineGameId);
     inviteLinkInput.value = url.toString();
     window.history.replaceState({}, '', url.toString());
+    resetChatUI();
     resetLocalBoard();
     showOnlineWaitingPanel();
     attachOnlineListener(onlineGameId);
@@ -1847,6 +2001,11 @@ async function joinOnlineGame(gameId) {
       return;
     }
     onlineGameId = gameId;
+    timeControl = data.timeControl || null;
+    timeControlSelect.value = timeControl
+      ? `${timeControl.baseMs}-${timeControl.incMs}`
+      : 'none';
+    resetChatUI();
     resetLocalBoard();
     attachOnlineListener(gameId);
   } catch (e) {
@@ -1883,6 +2042,7 @@ function handleOnlineGameUpdate(data) {
     onlineStatus = 'active';
     showOnlineConnectedPanel();
     resolveOnlineOpponent(data);
+    if (timeControl) startClockTick();
   }
 
   const moves = data.moves || [];
@@ -1891,12 +2051,22 @@ function handleOnlineGameUpdate(data) {
     onlineAppliedMoveCount++;
   }
 
+  const chatMsgs = data.chat || [];
+  while (chatRenderedCount < chatMsgs.length) {
+    renderChatMessage(chatMsgs[chatRenderedCount]);
+    chatRenderedCount++;
+  }
+
   if (data.status === 'finished') {
     onlineStatus = 'finished';
     if (!gameOver) {
       gameOver = true;
+      stopClockTick();
       if (data.result === 'stalemate') {
         statusEl.textContent = 'Stalemate — draw';
+      } else if (data.result && data.result.startsWith('timeout')) {
+        const winner = data.result.endsWith('w') ? 'White' : 'Black';
+        statusEl.textContent = `Tijd verstreken — ${winner} wint`;
       } else if (data.result) {
         const winner = data.result.endsWith('w') ? 'White' : 'Black';
         statusEl.textContent = `Checkmate — ${winner} wins`;
@@ -1967,7 +2137,7 @@ async function writeMatchRecords(gameId, data) {
   const wUid = data.players.w;
   const bUid = data.players.b;
   const isDraw = data.result === 'stalemate';
-  const winnerColor = data.result === 'checkmate-w' ? 'w' : data.result === 'checkmate-b' ? 'b' : null;
+  const winnerColor = data.result && data.result !== 'stalemate' ? (data.result.endsWith('w') ? 'w' : 'b') : null;
   const outcomeFor = (color) => (isDraw ? 'draw' : (color === winnerColor ? 'win' : 'loss'));
 
   const [wProfileSnap, bProfileSnap] = await Promise.all([
@@ -2016,6 +2186,8 @@ function leaveOnlineGame() {
   addOpponentFriendBtn.classList.add('hidden');
   addOpponentFriendBtn.textContent = '+ Vriend toevoegen';
   updateBoardOrientation();
+  stopClockTick();
+  resetChatUI();
   const url = new URL(window.location.href);
   url.searchParams.delete('game');
   window.history.replaceState({}, '', url.toString());
@@ -2134,6 +2306,7 @@ mode = modeSelect.value;
 humanSide = sideSelect.value;
 aiDepth = parseInt(difficultySelect.value, 10) + 1;
 difficultyWrap.style.display = mode === 'ai' ? '' : 'none';
+timeControl = parseTimeControlValue(timeControlSelect.value);
 
 currentTheme = loadPref('theme', currentTheme);
 themeSelect.value = currentTheme;
@@ -2149,6 +2322,7 @@ updateFullscreenButton();
 initBoardDOM();
 renderMoveList();
 renderBoard(false);
+setupClocks();
 
 const inviteGameId = new URLSearchParams(window.location.search).get('game');
 if (inviteGameId) {
