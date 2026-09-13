@@ -13,6 +13,7 @@
         <h1>Chess</h1>
         <div id="authArea" class="auth-area">
           <span id="authStatusText" class="auth-status-text">Laden…</span>
+          <button id="profileBtn" class="hidden">Profiel</button>
           <button id="loginBtn" class="hidden">Inloggen / Registreren</button>
           <button id="logoutBtn" class="hidden">Uitloggen</button>
         </div>
@@ -137,6 +138,33 @@
       <div id="usernameError" class="auth-error hidden"></div>
       <input type="text" id="usernameInput" placeholder="Gebruikersnaam" maxlength="20">
       <button id="usernameSubmitBtn">Opslaan</button>
+    </div>
+  </div>
+
+  <div id="profileModal" class="overlay hidden">
+    <div class="auth-box profile-box">
+      <button id="closeProfileBtn" class="modal-close" title="Sluiten">×</button>
+      <h2 id="profileUsername"></h2>
+      <div class="profile-stats">
+        <div class="profile-stat"><strong id="profileWins">0</strong><span>Gewonnen</span></div>
+        <div class="profile-stat"><strong id="profileLosses">0</strong><span>Verloren</span></div>
+        <div class="profile-stat"><strong id="profileDraws">0</strong><span>Gelijk</span></div>
+      </div>
+      <h3>Laatste partijen</h3>
+      <ol id="profileMatchList" class="match-list"></ol>
+    </div>
+  </div>
+
+  <div id="replayModal" class="overlay hidden">
+    <div class="auth-box replay-box">
+      <button id="closeReplayBtn" class="modal-close" title="Sluiten">×</button>
+      <h2 id="replayTitle"></h2>
+      <div id="replayBoard" class="board replay-board"></div>
+      <div class="replay-controls">
+        <button id="replayPrevBtn">◀</button>
+        <span id="replayPlyLabel"></span>
+        <button id="replayNextBtn">▶</button>
+      </div>
     </div>
   </div>
 

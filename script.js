@@ -4,7 +4,7 @@ import {
   GoogleAuthProvider, signInWithPopup, signOut,
   linkWithCredential, linkWithPopup, EmailAuthProvider,
   doc, getDoc, setDoc, updateDoc, onSnapshot,
-  collection, addDoc, query, where, getDocs,
+  collection, addDoc, query, where, getDocs, orderBy, limit,
   arrayUnion, serverTimestamp, runTransaction,
 } from './firebase-config.js';
 
@@ -748,6 +748,21 @@ const usernameModal = document.getElementById('usernameModal');
 const usernameError = document.getElementById('usernameError');
 const usernameInput = document.getElementById('usernameInput');
 const usernameSubmitBtn = document.getElementById('usernameSubmitBtn');
+const profileBtn = document.getElementById('profileBtn');
+const profileModal = document.getElementById('profileModal');
+const closeProfileBtn = document.getElementById('closeProfileBtn');
+const profileUsername = document.getElementById('profileUsername');
+const profileWins = document.getElementById('profileWins');
+const profileLosses = document.getElementById('profileLosses');
+const profileDraws = document.getElementById('profileDraws');
+const profileMatchList = document.getElementById('profileMatchList');
+const replayModal = document.getElementById('replayModal');
+const closeReplayBtn = document.getElementById('closeReplayBtn');
+const replayTitle = document.getElementById('replayTitle');
+const replayBoardEl = document.getElementById('replayBoard');
+const replayPrevBtn = document.getElementById('replayPrevBtn');
+const replayNextBtn = document.getElementById('replayNextBtn');
+const replayPlyLabel = document.getElementById('replayPlyLabel');
 
 let squareEls = [];
 let piecesLayerEl = null;
@@ -1224,14 +1239,17 @@ function renderAuthUI() {
     authStatusText.textContent = 'Gast';
     loginBtn.classList.remove('hidden');
     logoutBtn.classList.add('hidden');
+    profileBtn.classList.add('hidden');
   } else if (currentUserProfile) {
     authStatusText.textContent = currentUserProfile.username;
     loginBtn.classList.add('hidden');
     logoutBtn.classList.remove('hidden');
+    profileBtn.classList.remove('hidden');
   } else {
     authStatusText.textContent = currentUser.email || '…';
     loginBtn.classList.add('hidden');
     logoutBtn.classList.remove('hidden');
+    profileBtn.classList.add('hidden');
   }
 }
 
@@ -1407,6 +1425,162 @@ logoutBtn.addEventListener('click', async () => {
   await signOut(auth);
 });
 
+// ==================== Profile, stats & match history ====================
+
+const MATCH_LIST_LIMIT = 20;
+
+function matchDate(entry) {
+  if (!entry.createdAt || !entry.createdAt.toDate) return '';
+  return entry.createdAt.toDate().toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+}
+
+async function openProfileModal() {
+  if (!currentUser || currentUser.isAnonymous || !currentUserProfile) return;
+  profileUsername.textContent = currentUserProfile.username;
+  profileWins.textContent = '…';
+  profileLosses.textContent = '…';
+  profileDraws.textContent = '…';
+  profileMatchList.innerHTML = '';
+  profileModal.classList.remove('hidden');
+
+  try {
+    const entries = await fetchMatchHistory(currentUser.uid, MATCH_LIST_LIMIT);
+    renderProfileStats(entries);
+    renderMatchList(profileMatchList, entries);
+  } catch (e) {
+    console.error('Kon profiel niet laden', e);
+  }
+}
+
+function closeProfileModal() {
+  profileModal.classList.add('hidden');
+}
+
+async function fetchMatchHistory(uid, max) {
+  const q = query(
+    collection(db, 'users', uid, 'appliedGames'),
+    orderBy('createdAt', 'desc'),
+    limit(max)
+  );
+  const snaps = await getDocs(q);
+  return snaps.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+function renderProfileStats(entries) {
+  const wins = entries.filter((e) => e.result === 'win').length;
+  const losses = entries.filter((e) => e.result === 'loss').length;
+  const draws = entries.filter((e) => e.result === 'draw').length;
+  profileWins.textContent = wins;
+  profileLosses.textContent = losses;
+  profileDraws.textContent = draws;
+}
+
+function renderMatchList(listEl, entries) {
+  listEl.innerHTML = '';
+  if (!entries.length) {
+    const li = document.createElement('li');
+    li.className = 'match-row';
+    li.textContent = 'Nog geen online partijen gespeeld.';
+    listEl.appendChild(li);
+    return;
+  }
+  const resultLabelNL = { win: 'Gewonnen', loss: 'Verloren', draw: 'Gelijk' };
+  for (const entry of entries) {
+    const li = document.createElement('li');
+    li.className = 'match-row';
+
+    const badge = document.createElement('span');
+    badge.className = 'match-result-badge ' + entry.result;
+    badge.textContent = resultLabelNL[entry.result] || entry.result;
+
+    const opponent = document.createElement('span');
+    opponent.className = 'match-opponent';
+    opponent.textContent = `vs ${entry.opponentUsername}`;
+
+    const date = document.createElement('span');
+    date.className = 'match-date';
+    date.textContent = matchDate(entry);
+
+    const viewBtn = document.createElement('button');
+    viewBtn.textContent = 'Bekijk';
+    viewBtn.addEventListener('click', () => openReplay(entry));
+
+    li.append(badge, opponent, date, viewBtn);
+    listEl.appendChild(li);
+  }
+}
+
+profileBtn.addEventListener('click', openProfileModal);
+closeProfileBtn.addEventListener('click', closeProfileModal);
+
+// ==================== Match replay ====================
+
+let replayMoves = [];
+let replayPly = 0;
+
+function buildBoardAtPly(moves, uptoIndex) {
+  const g = createInitialGame();
+  for (let i = 0; i < uptoIndex; i++) {
+    const legal = generateLegalMoves(g);
+    const stored = moves[i];
+    const match = legal.find((m) => sameMove(m, stored));
+    if (!match) break;
+    if (stored.promoteTo) match.promoteTo = stored.promoteTo;
+    const result = applyMove(g, match);
+    g.board = result.board;
+    g.castling = result.castling;
+    g.enPassant = result.enPassant;
+    g.turn = opposite(g.turn);
+  }
+  return g.board;
+}
+
+function renderStaticBoard(container, board) {
+  container.innerHTML = '';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = document.createElement('div');
+      sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+      const piece = board[r][c];
+      if (piece) {
+        const span = document.createElement('span');
+        span.textContent = PIECE_UNICODE[piece.color][piece.type];
+        span.className = piece.color === 'w' ? 'piece-white' : 'piece-black';
+        sq.appendChild(span);
+      }
+      container.appendChild(sq);
+    }
+  }
+}
+
+function renderReplayAtCurrentPly() {
+  const board = buildBoardAtPly(replayMoves, replayPly);
+  renderStaticBoard(replayBoardEl, board);
+  replayPlyLabel.textContent = `${replayPly} / ${replayMoves.length}`;
+  replayPrevBtn.disabled = replayPly <= 0;
+  replayNextBtn.disabled = replayPly >= replayMoves.length;
+}
+
+function openReplay(entry) {
+  replayMoves = entry.moves || [];
+  replayPly = replayMoves.length;
+  replayTitle.textContent = `vs ${entry.opponentUsername} — jij speelde ${entry.myColor === 'w' ? 'wit' : 'zwart'}`;
+  renderReplayAtCurrentPly();
+  replayModal.classList.remove('hidden');
+}
+
+function closeReplay() {
+  replayModal.classList.add('hidden');
+}
+
+replayPrevBtn.addEventListener('click', () => {
+  if (replayPly > 0) { replayPly--; renderReplayAtCurrentPly(); }
+});
+replayNextBtn.addEventListener('click', () => {
+  if (replayPly < replayMoves.length) { replayPly++; renderReplayAtCurrentPly(); }
+});
+closeReplayBtn.addEventListener('click', closeReplay);
+
 // ==================== Online multiplayer (Firestore) ====================
 
 function gameDocRef(id) {
@@ -1577,16 +1751,71 @@ async function submitOnlineMove(move) {
 
 async function markOnlineGameFinished(result) {
   if (!onlineGameId) return;
+  const gameId = onlineGameId;
   try {
+    // Step 1: atomically flip status -> finished exactly once. This has to be its own
+    // transaction and commit BEFORE step 2, because our appliedGames security rule checks
+    // (via get()) that the game is already 'finished' — and get() inside a rule always
+    // sees the pre-transaction state, so it can never observe a write from the same
+    // transaction that's still in flight.
+    let gameDataAtFinish = null;
     await runTransaction(db, async (tx) => {
-      const ref = gameDocRef(onlineGameId);
+      const ref = gameDocRef(gameId);
       const snap = await tx.get(ref);
       if (!snap.exists() || snap.data().status === 'finished') return;
+      gameDataAtFinish = snap.data();
       tx.update(ref, { status: 'finished', result });
     });
+
+    // Someone else's client already finished this game — nothing more for us to do.
+    if (!gameDataAtFinish) return;
+
+    // Step 2: write the per-player match-history/stats record, using the data captured
+    // during the transaction above rather than re-reading the doc — a getDoc() right
+    // after can be served from the local watch cache (since a live onSnapshot listener
+    // is attached to this same doc) before that cache has caught up to what we just
+    // committed, making it look like the write never happened.
+    await writeMatchRecords(gameId, { ...gameDataAtFinish, status: 'finished', result });
   } catch (e) {
     console.error('Kon partij niet als afgelopen markeren', e);
   }
+}
+
+async function writeMatchRecords(gameId, data) {
+  const wUid = data.players.w;
+  const bUid = data.players.b;
+  const isDraw = data.result === 'stalemate';
+  const winnerColor = data.result === 'checkmate-w' ? 'w' : data.result === 'checkmate-b' ? 'b' : null;
+  const outcomeFor = (color) => (isDraw ? 'draw' : (color === winnerColor ? 'win' : 'loss'));
+
+  const [wProfileSnap, bProfileSnap] = await Promise.all([
+    getDoc(doc(db, 'users', wUid)),
+    getDoc(doc(db, 'users', bUid)),
+  ]);
+
+  const writes = [];
+  // Guests (no users/{uid} profile) don't get match history / stats — only real accounts do.
+  if (wProfileSnap.exists()) {
+    writes.push(setDoc(doc(db, 'users', wUid, 'appliedGames', gameId), {
+      opponentUid: bUid,
+      opponentUsername: bProfileSnap.exists() ? bProfileSnap.data().username : 'Gast',
+      myColor: 'w',
+      result: outcomeFor('w'),
+      moves: data.moves,
+      createdAt: serverTimestamp(),
+    }).catch((e) => console.warn('Match-record (wit) niet opgeslagen (mogelijk al aanwezig)', e.code)));
+  }
+  if (bProfileSnap.exists()) {
+    writes.push(setDoc(doc(db, 'users', bUid, 'appliedGames', gameId), {
+      opponentUid: wUid,
+      opponentUsername: wProfileSnap.exists() ? wProfileSnap.data().username : 'Gast',
+      myColor: 'b',
+      result: outcomeFor('b'),
+      moves: data.moves,
+      createdAt: serverTimestamp(),
+    }).catch((e) => console.warn('Match-record (zwart) niet opgeslagen (mogelijk al aanwezig)', e.code)));
+  }
+  await Promise.all(writes);
 }
 
 function leaveOnlineGame() {

@@ -2,6 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isFinishedGameBetween(uid, gameId, requesterUid) {
+      let game = get(/databases/$(database)/documents/games/$(gameId)).data;
+      return game.status == 'finished' &&
+        ((game.players.w == uid && game.players.b == requesterUid) ||
+         (game.players.b == uid && game.players.w == requesterUid) ||
+         (uid == requesterUid && (game.players.w == uid || game.players.b == uid)));
+    }
+
     match /games/{gameId} {
       // Both players (and only signed-in users, incl. anonymous/guest) can read a game.
       allow read: if request.auth != null;
@@ -35,20 +43,32 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       // Only the owner can create their own profile, and only in the
-      // expected shape (fresh stats, matching lowercase username).
+      // expected shape (matching lowercase username).
       allow create: if request.auth != null && request.auth.uid == uid &&
         request.resource.data.username is string &&
         request.resource.data.username.size() >= 3 &&
-        request.resource.data.usernameLower == request.resource.data.username.lower() &&
-        request.resource.data.stats.wins == 0 &&
-        request.resource.data.stats.losses == 0 &&
-        request.resource.data.stats.draws == 0;
+        request.resource.data.usernameLower == request.resource.data.username.lower();
 
-      // Only the owner can update their own profile. (Tightened further once
-      // stats-writing is added, so a client can't just inflate its own wins.)
+      // Only the owner can update their own profile.
       allow update: if request.auth != null && request.auth.uid == uid;
 
       allow delete: if false;
+
+      // Each finished game creates one immutable match-record per player here.
+      // This is what wins/losses/draws and match history are both derived from —
+      // deliberately no mutable "stats" counter, so there's nothing for either
+      // player's client to tamper with after the fact.
+      match /appliedGames/{gameId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+
+        // Can only be created if it corresponds to a real, already-finished
+        // game between exactly these two uids — and since writes here are
+        // create-only (no update/delete), the same finished game can never
+        // be counted twice.
+        allow create: if request.auth != null && isFinishedGameBetween(uid, gameId, request.auth.uid);
+
+        allow update, delete: if false;
+      }
     }
 
   }

@@ -494,7 +494,7 @@ main {
 .auth-status-text { color: var(--muted); }
 
 #logoutBtn { background: #3a3a45; }
-#loginBtn.hidden, #logoutBtn.hidden { display: none; }
+#loginBtn.hidden, #logoutBtn.hidden, #profileBtn.hidden { display: none; }
 
 .auth-box {
   position: relative;
@@ -608,6 +608,109 @@ main {
 }
 
 #usernameSubmitBtn { width: 100%; }
+
+/* ==================== Profile & replay ==================== */
+
+.profile-box { width: min(92vw, 420px); text-align: left; }
+.profile-box h2 { text-align: center; margin-bottom: 16px; }
+.profile-box h3 { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px; }
+
+.profile-stats {
+  display: flex;
+  justify-content: space-around;
+  background: #1a1a22;
+  border-radius: 8px;
+  padding: 14px 0;
+}
+
+.profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-stat strong { font-size: 1.4rem; }
+.profile-stat span { font-size: 0.75rem; color: var(--muted); }
+
+.match-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.match-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1a1a22;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.match-row .match-opponent { flex: 1; text-align: left; }
+.match-row .match-date { color: var(--muted); font-size: 0.75rem; }
+
+.match-result-badge {
+  font-weight: 700;
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.match-result-badge.win { background: #2e7d4f; color: #d8ffe9; }
+.match-result-badge.loss { background: #8a2e2e; color: #ffdcdc; }
+.match-result-badge.draw { background: #8a7a1f; color: #fff4cf; }
+
+.match-row button {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  background: var(--accent);
+}
+
+.replay-box { width: min(92vw, 420px); }
+.replay-box h2 { margin-bottom: 14px; font-size: 1rem; text-align: center; }
+
+.replay-board {
+  width: min(80vw, 320px);
+  height: min(80vw, 320px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.replay-board .square {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(6vw, 26px);
+}
+
+.replay-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.replay-controls button {
+  padding: 6px 14px;
+}
+
+.replay-controls span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-width: 60px;
+  text-align: center;
+}
 
 /* ==================== Fullscreen mode (game area only) ====================
    Note: each vendor-prefixed :fullscreen variant gets its OWN rule below.
