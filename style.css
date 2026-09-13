@@ -497,6 +497,21 @@ main {
 
 .title-row h1 { margin: 0; }
 
+#logoReset {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+
+#logoReset:hover { opacity: 0.8; }
+
+.site-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 24px 0 8px;
+}
+
 .auth-area {
   display: flex;
   align-items: center;
@@ -625,7 +640,65 @@ main {
 /* ==================== Profile & replay ==================== */
 
 .profile-box { width: min(92vw, 420px); text-align: left; }
-.profile-box h2 { text-align: center; margin-bottom: 16px; }
+.profile-box h2 { margin: 0; }
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.avatar-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #1a1a22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upload-photo-btn {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.avatar-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.avatar-picker button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.2rem;
+  background: #1a1a22;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-picker button.selected {
+  background: var(--accent);
+}
 .profile-box h3 { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 0 10px; }
 
 .profile-stats {
@@ -786,6 +859,38 @@ main {
   align-self: flex-start;
 }
 
+.game-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.game-action-row button {
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+#resignBtn { background: #7a2e3a; }
+#offerDrawBtn { background: #3a3a45; }
+
+.draw-offer-banner {
+  margin-top: 8px;
+  background: #2a2a1a;
+  border: 1px solid #8a7a1f;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.draw-offer-banner.hidden { display: none; }
+.draw-offer-banner p { margin: 0 0 8px; font-size: 0.85rem; }
+.draw-offer-banner button {
+  font-size: 0.8rem;
+  padding: 5px 12px;
+  margin-right: 8px;
+}
+#acceptDrawBtn { background: #2e7d4f; }
+#declineDrawBtn { background: #7a2e3a; }
+
 /* ==================== Clocks ==================== */
 
 .clocks {
@@ -895,75 +1000,52 @@ main {
 }
 
 /* ==================== Fullscreen mode (game area only) ====================
-   Note: each vendor-prefixed :fullscreen variant gets its OWN rule below.
-   Combining them in one comma-separated selector list would invalidate the
-   entire rule in browsers that don't recognize one of the other prefixes. */
+   CSS-only "maximized" overlay instead of the native Fullscreen API: iOS
+   Safari doesn't support requestFullscreen() on arbitrary elements at all,
+   and this works identically on every browser/device without needing it. */
 
-.board-wrap:fullscreen {
+.board-wrap.pseudo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
   display: flex;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  padding: 24px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: var(--bg);
-}
-
-.board-wrap:-webkit-full-screen {
-  display: flex;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
   padding: 24px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
   background: var(--bg);
+  overflow-y: auto;
 }
 
-.board-wrap:-ms-fullscreen {
-  display: flex;
-  width: 100vw;
-  height: 100vh;
-  margin: 0;
-  padding: 24px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: var(--bg);
+body.no-scroll {
+  overflow: hidden;
 }
 
-.board-wrap::backdrop {
-  background: var(--bg);
-}
-
-.board-wrap:fullscreen .board {
+.board-wrap.pseudo-fullscreen .board {
   width: min(85vh, 92vw, 900px);
   height: min(85vh, 92vw, 900px);
   flex: none;
 }
 
-.board-wrap:-webkit-full-screen .board {
-  width: min(85vh, 92vw, 900px);
-  height: min(85vh, 92vw, 900px);
-  flex: none;
+.board-wrap.pseudo-fullscreen .status { font-size: 1.3rem; flex: none; }
+.board-wrap.pseudo-fullscreen .feedback-card { flex: none; }
+
+.exit-fullscreen-btn {
+  display: none;
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 1001;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 1rem;
 }
 
-.board-wrap:-ms-fullscreen .board {
-  width: min(85vh, 92vw, 900px);
-  height: min(85vh, 92vw, 900px);
-  flex: none;
+.board-wrap.pseudo-fullscreen .exit-fullscreen-btn {
+  display: block;
 }
-
-.board-wrap:fullscreen .status { font-size: 1.3rem; flex: none; }
-.board-wrap:-webkit-full-screen .status { font-size: 1.3rem; flex: none; }
-.board-wrap:-ms-fullscreen .status { font-size: 1.3rem; flex: none; }
-
-.board-wrap:fullscreen .feedback-card { flex: none; }
-.board-wrap:-webkit-full-screen .feedback-card { flex: none; }
-.board-wrap:-ms-fullscreen .feedback-card { flex: none; }

@@ -733,6 +733,12 @@ const chatBox = document.getElementById('chatBox');
 const chatMessagesEl = document.getElementById('chatMessages');
 const chatForm = document.getElementById('chatForm');
 const chatInput = document.getElementById('chatInput');
+const resignBtn = document.getElementById('resignBtn');
+const offerDrawBtn = document.getElementById('offerDrawBtn');
+const drawOfferPendingText = document.getElementById('drawOfferPendingText');
+const drawOfferBanner = document.getElementById('drawOfferBanner');
+const acceptDrawBtn = document.getElementById('acceptDrawBtn');
+const declineDrawBtn = document.getElementById('declineDrawBtn');
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
 const soundBtn = document.getElementById('soundBtn');
@@ -771,6 +777,9 @@ const profileBtn = document.getElementById('profileBtn');
 const profileModal = document.getElementById('profileModal');
 const closeProfileBtn = document.getElementById('closeProfileBtn');
 const profileUsername = document.getElementById('profileUsername');
+const profileAvatarPreview = document.getElementById('profileAvatarPreview');
+const avatarPicker = document.getElementById('avatarPicker');
+const avatarPhotoInput = document.getElementById('avatarPhotoInput');
 const profileWins = document.getElementById('profileWins');
 const profileLosses = document.getElementById('profileLosses');
 const profileDraws = document.getElementById('profileDraws');
@@ -1322,6 +1331,61 @@ chatForm.addEventListener('submit', (ev) => {
   sendChatMessage(text);
 });
 
+// ==================== Resign & draw offers ====================
+
+function resignOnlineGame() {
+  if (!onlineGameId || gameOver || !onlineMyColor) return;
+  if (!confirm('Weet je zeker dat je wilt opgeven?')) return;
+  const result = onlineMyColor === 'w' ? 'resign-b' : 'resign-w';
+  markOnlineGameFinished(result);
+}
+
+async function offerDraw() {
+  if (!onlineGameId || gameOver) return;
+  offerDrawBtn.disabled = true;
+  try {
+    await updateDoc(gameDocRef(onlineGameId), { drawOfferedBy: currentUser.uid });
+  } catch (e) {
+    console.error('Kon remise niet aanbieden', e);
+  } finally {
+    offerDrawBtn.disabled = false;
+  }
+}
+
+async function respondToDrawOffer(accept) {
+  if (!onlineGameId) return;
+  try {
+    if (accept) {
+      markOnlineGameFinished('draw-agreed');
+    } else {
+      await updateDoc(gameDocRef(onlineGameId), { drawOfferedBy: null });
+    }
+  } catch (e) {
+    console.error('Kon niet reageren op remise-aanbod', e);
+  }
+}
+
+function updateDrawOfferUI(data) {
+  const offeredBy = data.drawOfferedBy || null;
+  if (!offeredBy) {
+    drawOfferPendingText.classList.add('hidden');
+    drawOfferBanner.classList.add('hidden');
+    return;
+  }
+  if (offeredBy === currentUser?.uid) {
+    drawOfferPendingText.classList.remove('hidden');
+    drawOfferBanner.classList.add('hidden');
+  } else {
+    drawOfferPendingText.classList.add('hidden');
+    drawOfferBanner.classList.remove('hidden');
+  }
+}
+
+resignBtn.addEventListener('click', resignOnlineGame);
+offerDrawBtn.addEventListener('click', offerDraw);
+acceptDrawBtn.addEventListener('click', () => respondToDrawOffer(true));
+declineDrawBtn.addEventListener('click', () => respondToDrawOffer(false));
+
 // ==================== Authentication ====================
 
 const AUTH_ERROR_MESSAGES_NL = {
@@ -1600,6 +1664,8 @@ async function openProfileModal() {
   profileDraws.textContent = '…';
   profileMatchList.innerHTML = '';
   profileModal.classList.remove('hidden');
+  renderAvatarPicker();
+  renderAvatarPreview(profileAvatarPreview, currentUserProfile);
 
   friendsList.innerHTML = '';
   try {
@@ -1672,6 +1738,82 @@ function renderMatchList(listEl, entries) {
 
 profileBtn.addEventListener('click', openProfileModal);
 closeProfileBtn.addEventListener('click', closeProfileModal);
+
+// ==================== Avatar ====================
+
+const AVATAR_PRESETS = ['🐱', '🐶', '🦊', '🐻', '🐼', '🦁', '🐸', '🐵', '🦄', '🐯', '🐨', '🐙'];
+
+function renderAvatarPreview(el, profile) {
+  if (profile?.photoDataUrl) {
+    el.innerHTML = `<img src="${profile.photoDataUrl}" alt="avatar">`;
+  } else {
+    el.textContent = profile?.avatar || '🐱';
+  }
+}
+
+function renderAvatarPicker() {
+  avatarPicker.innerHTML = '';
+  for (const emoji of AVATAR_PRESETS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = emoji;
+    btn.classList.toggle('selected', !currentUserProfile?.photoDataUrl && currentUserProfile?.avatar === emoji);
+    btn.addEventListener('click', () => selectAvatar(emoji));
+    avatarPicker.appendChild(btn);
+  }
+}
+
+async function selectAvatar(emoji) {
+  try {
+    await updateDoc(doc(db, 'users', currentUser.uid), { avatar: emoji, photoDataUrl: null });
+    currentUserProfile.avatar = emoji;
+    currentUserProfile.photoDataUrl = null;
+    renderAvatarPreview(profileAvatarPreview, currentUserProfile);
+    renderAvatarPicker();
+  } catch (e) {
+    console.error('Kon avatar niet opslaan', e);
+  }
+}
+
+function compressImageToDataUrl(file, maxSize = 128, quality = 0.6) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+avatarPhotoInput.addEventListener('change', async () => {
+  const file = avatarPhotoInput.files[0];
+  avatarPhotoInput.value = '';
+  if (!file || !currentUser || currentUser.isAnonymous) return;
+  try {
+    const dataUrl = await compressImageToDataUrl(file);
+    if (dataUrl.length > 900000) {
+      alert('Deze foto is te groot, probeer een andere.');
+      return;
+    }
+    await updateDoc(doc(db, 'users', currentUser.uid), { photoDataUrl: dataUrl });
+    currentUserProfile.photoDataUrl = dataUrl;
+    renderAvatarPreview(profileAvatarPreview, currentUserProfile);
+    renderAvatarPicker();
+  } catch (e) {
+    console.error('Kon foto niet uploaden', e);
+    alert('Kon foto niet uploaden. Probeer het opnieuw.');
+  }
+});
 
 // ==================== Friends ====================
 
@@ -2043,6 +2185,8 @@ function handleOnlineGameUpdate(data) {
     showOnlineConnectedPanel();
     resolveOnlineOpponent(data);
     if (timeControl) startClockTick();
+    resignBtn.disabled = false;
+    offerDrawBtn.disabled = false;
   }
 
   const moves = data.moves || [];
@@ -2057,16 +2201,31 @@ function handleOnlineGameUpdate(data) {
     chatRenderedCount++;
   }
 
+  if (data.status === 'active') {
+    updateDrawOfferUI(data);
+  }
+
   if (data.status === 'finished') {
     onlineStatus = 'finished';
+    resignBtn.disabled = true;
+    offerDrawBtn.disabled = true;
+    drawOfferPendingText.classList.add('hidden');
+    drawOfferBanner.classList.add('hidden');
     if (!gameOver) {
       gameOver = true;
       stopClockTick();
-      if (data.result === 'stalemate') {
-        statusEl.textContent = 'Stalemate — draw';
+      if (data.result === 'stalemate' || data.result === 'draw-agreed') {
+        statusEl.textContent = data.result === 'draw-agreed' ? 'Remise overeengekomen — gelijkspel' : 'Stalemate — draw';
       } else if (data.result && data.result.startsWith('timeout')) {
         const winner = data.result.endsWith('w') ? 'White' : 'Black';
         statusEl.textContent = `Tijd verstreken — ${winner} wint`;
+      } else if (data.result && data.result.startsWith('resign')) {
+        const winnerColor = data.result.endsWith('w') ? 'w' : 'b';
+        const losingColor = winnerColor === 'w' ? 'b' : 'w';
+        const winnerName = winnerColor === 'w' ? 'White' : 'Black';
+        statusEl.textContent = losingColor === onlineMyColor
+          ? `Je hebt opgegeven — ${winnerName} wint`
+          : `Tegenstander gaf op — ${winnerName} wint`;
       } else if (data.result) {
         const winner = data.result.endsWith('w') ? 'White' : 'Black';
         statusEl.textContent = `Checkmate — ${winner} wins`;
@@ -2136,7 +2295,7 @@ async function markOnlineGameFinished(result) {
 async function writeMatchRecords(gameId, data) {
   const wUid = data.players.w;
   const bUid = data.players.b;
-  const isDraw = data.result === 'stalemate';
+  const isDraw = data.result === 'stalemate' || data.result === 'draw-agreed';
   const winnerColor = data.result && data.result !== 'stalemate' ? (data.result.endsWith('w') ? 'w' : 'b') : null;
   const outcomeFor = (color) => (isDraw ? 'draw' : (color === winnerColor ? 'win' : 'loss'));
 
@@ -2268,37 +2427,35 @@ undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 
 // ==================== Fullscreen ====================
+// The native Fullscreen API is unreliable on mobile (iOS Safari doesn't support
+// it for arbitrary elements at all, and Android browsers vary). A CSS-only
+// "maximized" overlay works identically everywhere instead.
 
 const fullscreenBtn = document.getElementById('fullscreenBtn');
+const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+const boardWrapEl = document.querySelector('.board-wrap');
 
 function isFullscreenActive() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement);
-}
-
-function enterFullscreen() {
-  const el = document.querySelector('.board-wrap'); // just the game area, not the whole page
-  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
-  if (fn) fn.call(el);
-}
-
-function exitFullscreenMode() {
-  const fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
-  if (fn) fn.call(document);
+  return boardWrapEl.classList.contains('pseudo-fullscreen');
 }
 
 function updateFullscreenButton() {
   const active = isFullscreenActive();
   fullscreenBtn.textContent = active ? '⤢' : '⛶';
-  fullscreenBtn.title = active ? 'Exit fullscreen' : 'Toggle fullscreen';
+  fullscreenBtn.title = active ? 'Verlaat volledig scherm' : 'Volledig scherm';
 }
 
-fullscreenBtn.addEventListener('click', () => {
-  if (isFullscreenActive()) exitFullscreenMode();
-  else enterFullscreen();
-});
+function toggleFullscreen() {
+  boardWrapEl.classList.toggle('pseudo-fullscreen');
+  document.body.classList.toggle('no-scroll', isFullscreenActive());
+  updateFullscreenButton();
+}
 
-['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'].forEach((evt) => {
-  document.addEventListener(evt, updateFullscreenButton);
+fullscreenBtn.addEventListener('click', toggleFullscreen);
+exitFullscreenBtn.addEventListener('click', toggleFullscreen);
+
+document.getElementById('logoReset').addEventListener('click', () => {
+  window.location.href = window.location.origin + window.location.pathname;
 });
 
 // Init — restore saved preferences (theme, sound, learn mode) before first render

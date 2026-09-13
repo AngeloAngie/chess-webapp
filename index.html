@@ -10,7 +10,7 @@
   <div class="app">
     <header>
       <div class="title-row">
-        <h1>Chess</h1>
+        <h1 id="logoReset" title="Terug naar start">Chess</h1>
         <div id="authArea" class="auth-area">
           <span id="authStatusText" class="auth-status-text">Laden…</span>
           <button id="profileBtn" class="hidden">Profiel</button>
@@ -90,6 +90,7 @@
 
     <main>
       <div class="board-wrap">
+        <button id="exitFullscreenBtn" class="exit-fullscreen-btn" title="Verlaat volledig scherm">✕</button>
         <div id="onlinePanel" class="online-panel hidden">
           <div id="onlineIdle">
             <button id="createInviteBtn">Nodig vriend uit</button>
@@ -105,6 +106,16 @@
           <div id="onlineConnected" class="hidden">
             <p class="online-status-text" id="onlineConnectedText"></p>
             <button id="addOpponentFriendBtn" class="hidden" type="button">+ Vriend toevoegen</button>
+            <div class="game-action-row">
+              <button id="resignBtn" type="button">Opgeven</button>
+              <button id="offerDrawBtn" type="button">Remise aanbieden</button>
+            </div>
+            <p id="drawOfferPendingText" class="online-status-text hidden">Remise aangeboden, wachten op antwoord…</p>
+            <div id="drawOfferBanner" class="draw-offer-banner hidden">
+              <p>Je tegenstander biedt remise aan.</p>
+              <button id="acceptDrawBtn" type="button">Accepteren</button>
+              <button id="declineDrawBtn" type="button">Weigeren</button>
+            </div>
             <div id="chatBox" class="chat-box">
               <ol id="chatMessages" class="chat-messages"></ol>
               <form id="chatForm" class="chat-form">
@@ -148,6 +159,8 @@
         </div>
       </aside>
     </main>
+
+    <footer class="site-footer">Made by AngieTech</footer>
   </div>
 
   <div id="promotionOverlay" class="overlay hidden">
@@ -188,7 +201,17 @@
   <div id="profileModal" class="overlay hidden">
     <div class="auth-box profile-box">
       <button id="closeProfileBtn" class="modal-close" title="Sluiten">×</button>
-      <h2 id="profileUsername"></h2>
+      <div class="avatar-row">
+        <div id="profileAvatarPreview" class="avatar-preview">🐱</div>
+        <div>
+          <h2 id="profileUsername"></h2>
+          <label class="upload-photo-btn">
+            Foto uploaden
+            <input type="file" id="avatarPhotoInput" accept="image/*" hidden>
+          </label>
+        </div>
+      </div>
+      <div id="avatarPicker" class="avatar-picker"></div>
       <div class="profile-stats">
         <div class="profile-stat"><strong id="profileWins">0</strong><span>Gewonnen</span></div>
         <div class="profile-stat"><strong id="profileLosses">0</strong><span>Verloren</span></div>
