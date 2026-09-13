@@ -29,5 +29,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{uid} {
+      // Any signed-in user (guest or real) can read a profile — needed for
+      // username lookups and viewing a friend's stats.
+      allow read: if request.auth != null;
+
+      // Only the owner can create their own profile, and only in the
+      // expected shape (fresh stats, matching lowercase username).
+      allow create: if request.auth != null && request.auth.uid == uid &&
+        request.resource.data.username is string &&
+        request.resource.data.username.size() >= 3 &&
+        request.resource.data.usernameLower == request.resource.data.username.lower() &&
+        request.resource.data.stats.wins == 0 &&
+        request.resource.data.stats.losses == 0 &&
+        request.resource.data.stats.draws == 0;
+
+      // Only the owner can update their own profile. (Tightened further once
+      // stats-writing is added, so a client can't just inflate its own wins.)
+      allow update: if request.auth != null && request.auth.uid == uid;
+
+      allow delete: if false;
+    }
+
   }
 }

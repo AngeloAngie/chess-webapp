@@ -471,6 +471,144 @@ main {
   background: #7a2e3a;
 }
 
+/* ==================== Auth ==================== */
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.title-row h1 { margin: 0; }
+
+.auth-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+
+.auth-status-text { color: var(--muted); }
+
+#logoutBtn { background: #3a3a45; }
+#loginBtn.hidden, #logoutBtn.hidden { display: none; }
+
+.auth-box {
+  position: relative;
+  background: var(--panel-bg);
+  padding: 24px 26px;
+  border-radius: 10px;
+  width: min(90vw, 360px);
+  text-align: center;
+}
+
+.auth-box h2 {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.3rem;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: #1a1a22;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.auth-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+#authForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#authForm input {
+  background: #1a1a22;
+  color: var(--text);
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+#authSubmitBtn { margin-top: 4px; }
+
+.auth-divider {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #444;
+}
+
+.google-btn {
+  width: 100%;
+  background: #fff;
+  color: #333;
+  font-weight: 600;
+}
+
+.auth-error {
+  background: rgba(180, 40, 40, 0.25);
+  color: #ffb3b3;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.auth-error.hidden { display: none; }
+
+#usernameInput {
+  width: 100%;
+  background: #1a1a22;
+  color: var(--text);
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  margin: 10px 0 14px;
+  text-align: center;
+}
+
+#usernameSubmitBtn { width: 100%; }
+
 /* ==================== Fullscreen mode (game area only) ====================
    Note: each vendor-prefixed :fullscreen variant gets its OWN rule below.
    Combining them in one comma-separated selector list would invalidate the

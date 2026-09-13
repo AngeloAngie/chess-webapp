@@ -9,7 +9,14 @@
 <body>
   <div class="app">
     <header>
-      <h1>Chess</h1>
+      <div class="title-row">
+        <h1>Chess</h1>
+        <div id="authArea" class="auth-area">
+          <span id="authStatusText" class="auth-status-text">Laden…</span>
+          <button id="loginBtn" class="hidden">Inloggen / Registreren</button>
+          <button id="logoutBtn" class="hidden">Uitloggen</button>
+        </div>
+      </div>
       <div class="controls">
         <label class="mode-toggle">
           <span>Mode</span>
@@ -102,6 +109,34 @@
     <div class="promotion-box">
       <p>Promote pawn to:</p>
       <div class="promotion-choices" id="promotionChoices"></div>
+    </div>
+  </div>
+
+  <div id="authModal" class="overlay hidden">
+    <div class="auth-box">
+      <button id="closeAuthModalBtn" class="modal-close" title="Sluiten">×</button>
+      <div class="auth-tabs">
+        <button id="authTabLogin" class="auth-tab active" type="button">Inloggen</button>
+        <button id="authTabRegister" class="auth-tab" type="button">Registreren</button>
+      </div>
+      <div id="authError" class="auth-error hidden"></div>
+      <form id="authForm">
+        <input type="email" id="authEmail" placeholder="E-mailadres" autocomplete="email" required>
+        <input type="password" id="authPassword" placeholder="Wachtwoord" autocomplete="current-password" required minlength="6">
+        <button type="submit" id="authSubmitBtn">Inloggen</button>
+      </form>
+      <div class="auth-divider">of</div>
+      <button id="googleSignInBtn" class="google-btn" type="button">Inloggen met Google</button>
+    </div>
+  </div>
+
+  <div id="usernameModal" class="overlay hidden">
+    <div class="auth-box">
+      <h2>Kies een gebruikersnaam</h2>
+      <p class="online-status-text">Zo zien anderen je, bijvoorbeeld bij vrienden toevoegen.</p>
+      <div id="usernameError" class="auth-error hidden"></div>
+      <input type="text" id="usernameInput" placeholder="Gebruikersnaam" maxlength="20">
+      <button id="usernameSubmitBtn">Opslaan</button>
     </div>
   </div>
 

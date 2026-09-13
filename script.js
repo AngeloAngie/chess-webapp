@@ -1,7 +1,11 @@
 import {
   auth, db, onAuthStateChanged, signInAnonymously,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  GoogleAuthProvider, signInWithPopup, signOut,
+  linkWithCredential, linkWithPopup, EmailAuthProvider,
   doc, getDoc, setDoc, updateDoc, onSnapshot,
-  collection, addDoc, arrayUnion, serverTimestamp, runTransaction,
+  collection, addDoc, query, where, getDocs,
+  arrayUnion, serverTimestamp, runTransaction,
 } from './firebase-config.js';
 
 // ==================== Chess engine (board, rules, move generation) ====================
@@ -685,8 +689,13 @@ let redoStack = []; // stack of snapshots for redo
 let learnMode = false;
 let currentTheme = 'classic';
 
-// Online multiplayer state
+// Authentication state
 let currentUser = null; // Firebase auth user (anonymous or real)
+let currentUserProfile = null; // Firestore users/{uid} doc data, once loaded (null for guests)
+let authReadyPromise = null;
+let authMode = 'login'; // 'login' | 'register', which tab the auth modal is showing
+
+// Online multiplayer state
 let onlineGameId = null;
 let onlineUnsubscribe = null;
 let onlineMyColor = null; // 'w' or 'b'
@@ -721,6 +730,24 @@ const inviteLinkInput = document.getElementById('inviteLinkInput');
 const createInviteBtn = document.getElementById('createInviteBtn');
 const copyInviteBtn = document.getElementById('copyInviteBtn');
 const leaveOnlineBtn = document.getElementById('leaveOnlineBtn');
+const authArea = document.getElementById('authArea');
+const authStatusText = document.getElementById('authStatusText');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const authModal = document.getElementById('authModal');
+const closeAuthModalBtn = document.getElementById('closeAuthModalBtn');
+const authTabLogin = document.getElementById('authTabLogin');
+const authTabRegister = document.getElementById('authTabRegister');
+const authError = document.getElementById('authError');
+const authForm = document.getElementById('authForm');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const googleSignInBtn = document.getElementById('googleSignInBtn');
+const usernameModal = document.getElementById('usernameModal');
+const usernameError = document.getElementById('usernameError');
+const usernameInput = document.getElementById('usernameInput');
+const usernameSubmitBtn = document.getElementById('usernameSubmitBtn');
 
 let squareEls = [];
 let piecesLayerEl = null;
@@ -1123,27 +1150,275 @@ function redo() {
   renderBoard(false);
 }
 
+// ==================== Authentication ====================
+
+const AUTH_ERROR_MESSAGES_NL = {
+  'auth/invalid-email': 'Ongeldig e-mailadres.',
+  'auth/user-not-found': 'Geen account gevonden met dit e-mailadres.',
+  'auth/wrong-password': 'Onjuist wachtwoord.',
+  'auth/invalid-credential': 'E-mailadres of wachtwoord is onjuist.',
+  'auth/email-already-in-use': 'Dit e-mailadres is al in gebruik. Probeer in te loggen.',
+  'auth/weak-password': 'Wachtwoord moet minstens 6 tekens zijn.',
+  'auth/popup-closed-by-user': 'Google-login geannuleerd.',
+  'auth/network-request-failed': 'Netwerkfout. Probeer het opnieuw.',
+};
+
+function authErrorMessage(e) {
+  return AUTH_ERROR_MESSAGES_NL[e.code] || 'Er ging iets mis. Probeer het opnieuw.';
+}
+
+// Handles both real onAuthStateChanged events AND the direct result of a
+// register/login/Google action. onAuthStateChanged does NOT reliably re-fire
+// when linkWithCredential/linkWithPopup upgrades an anonymous user in place
+// (same uid, so Firebase doesn't always treat it as a new "sign-in" event) —
+// so register/login/Google handlers call this explicitly with their result
+// rather than relying solely on the passive listener.
+async function handleUserSignedIn(user) {
+  currentUser = user;
+
+  if (user.isAnonymous) {
+    currentUserProfile = null;
+    renderAuthUI();
+    return;
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if (snap.exists()) {
+      currentUserProfile = snap.data();
+      renderAuthUI();
+    } else {
+      currentUserProfile = null;
+      renderAuthUI();
+      openUsernameModal();
+    }
+  } catch (e) {
+    console.error('Kon gebruikersprofiel niet laden', e);
+    renderAuthUI();
+  }
+}
+
+authReadyPromise = new Promise((resolve) => {
+  let resolved = false;
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      try {
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.error('Anoniem inloggen mislukt', e);
+      }
+      return;
+    }
+
+    if (!resolved) {
+      resolved = true;
+      resolve(user);
+    }
+
+    await handleUserSignedIn(user);
+  });
+});
+
+function renderAuthUI() {
+  if (!currentUser || currentUser.isAnonymous) {
+    authStatusText.textContent = 'Gast';
+    loginBtn.classList.remove('hidden');
+    logoutBtn.classList.add('hidden');
+  } else if (currentUserProfile) {
+    authStatusText.textContent = currentUserProfile.username;
+    loginBtn.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+  } else {
+    authStatusText.textContent = currentUser.email || '…';
+    loginBtn.classList.add('hidden');
+    logoutBtn.classList.remove('hidden');
+  }
+}
+
+function openAuthModal(initialTab) {
+  setAuthTab(initialTab || 'login');
+  authError.classList.add('hidden');
+  authForm.reset();
+  authModal.classList.remove('hidden');
+}
+
+function closeAuthModal() {
+  authModal.classList.add('hidden');
+}
+
+function setAuthTab(tabMode) {
+  authMode = tabMode;
+  authTabLogin.classList.toggle('active', tabMode === 'login');
+  authTabRegister.classList.toggle('active', tabMode === 'register');
+  authSubmitBtn.textContent = tabMode === 'login' ? 'Inloggen' : 'Registreren';
+  authPassword.autocomplete = tabMode === 'login' ? 'current-password' : 'new-password';
+}
+
+function showAuthError(message) {
+  authError.textContent = message;
+  authError.classList.remove('hidden');
+}
+
+async function registerWithEmail(email, password) {
+  const current = auth.currentUser;
+  try {
+    if (current && current.isAnonymous) {
+      const credential = EmailAuthProvider.credential(email, password);
+      const result = await linkWithCredential(current, credential);
+      return result.user;
+    }
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (e) {
+    if (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use') {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
+    }
+    throw e;
+  }
+}
+
+async function loginWithEmail(email, password) {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+
+async function signInWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  const current = auth.currentUser;
+  try {
+    if (current && current.isAnonymous) {
+      const result = await linkWithPopup(current, provider);
+      return result.user;
+    }
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (e) {
+    if (e.code === 'auth/credential-already-in-use') {
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    }
+    throw e;
+  }
+}
+
+async function isUsernameTaken(usernameLower) {
+  const q = query(collection(db, 'users'), where('usernameLower', '==', usernameLower));
+  const snaps = await getDocs(q);
+  return !snaps.empty;
+}
+
+function openUsernameModal() {
+  usernameError.classList.add('hidden');
+  usernameInput.value = '';
+  usernameModal.classList.remove('hidden');
+}
+
+function closeUsernameModal() {
+  usernameModal.classList.add('hidden');
+}
+
+function showUsernameError(message) {
+  usernameError.textContent = message;
+  usernameError.classList.remove('hidden');
+}
+
+async function submitUsername() {
+  const username = usernameInput.value.trim();
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) {
+    showUsernameError('3-20 tekens: letters, cijfers en _.');
+    return;
+  }
+  const usernameLower = username.toLowerCase();
+  usernameSubmitBtn.disabled = true;
+  try {
+    if (await isUsernameTaken(usernameLower)) {
+      showUsernameError('Deze gebruikersnaam is al in gebruik.');
+      return;
+    }
+    await setDoc(doc(db, 'users', currentUser.uid), {
+      username,
+      usernameLower,
+      email: currentUser.email || null,
+      createdAt: serverTimestamp(),
+      stats: { wins: 0, losses: 0, draws: 0 },
+    });
+    currentUserProfile = { username, usernameLower, stats: { wins: 0, losses: 0, draws: 0 } };
+    renderAuthUI();
+    closeUsernameModal();
+  } catch (e) {
+    console.error('Kon gebruikersnaam niet opslaan', e);
+    showUsernameError('Kon niet opslaan. Probeer het opnieuw.');
+  } finally {
+    usernameSubmitBtn.disabled = false;
+  }
+}
+
+loginBtn.addEventListener('click', () => openAuthModal('login'));
+closeAuthModalBtn.addEventListener('click', closeAuthModal);
+authTabLogin.addEventListener('click', () => setAuthTab('login'));
+authTabRegister.addEventListener('click', () => setAuthTab('register'));
+
+authForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  authError.classList.add('hidden');
+  authSubmitBtn.disabled = true;
+  try {
+    const user = authMode === 'login'
+      ? await loginWithEmail(authEmail.value.trim(), authPassword.value)
+      : await registerWithEmail(authEmail.value.trim(), authPassword.value);
+    await handleUserSignedIn(user);
+    closeAuthModal();
+  } catch (e) {
+    console.error('Auth error', e);
+    showAuthError(authErrorMessage(e));
+  } finally {
+    authSubmitBtn.disabled = false;
+  }
+});
+
+googleSignInBtn.addEventListener('click', async () => {
+  authError.classList.add('hidden');
+  googleSignInBtn.disabled = true;
+  try {
+    const user = await signInWithGoogle();
+    await handleUserSignedIn(user);
+    closeAuthModal();
+  } catch (e) {
+    console.error('Google sign-in error', e);
+    showAuthError(authErrorMessage(e));
+  } finally {
+    googleSignInBtn.disabled = false;
+  }
+});
+
+usernameSubmitBtn.addEventListener('click', submitUsername);
+usernameInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') submitUsername();
+});
+
+logoutBtn.addEventListener('click', async () => {
+  if (mode === 'online') {
+    leaveOnlineGame();
+    resetLocalBoard();
+    showOnlineIdlePanel();
+  }
+  currentUserProfile = null;
+  await signOut(auth);
+});
+
 // ==================== Online multiplayer (Firestore) ====================
 
 function gameDocRef(id) {
   return doc(db, 'games', id);
 }
 
-function ensureAuth() {
-  if (currentUser) return Promise.resolve(currentUser);
-  return new Promise((resolve, reject) => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        currentUser = user;
-        unsub();
-        resolve(user);
-      }
-    });
-    signInAnonymously(auth).catch((e) => {
-      unsub();
-      reject(e);
-    });
-  });
+// authReadyPromise only guarantees the initial sign-in bootstrap has completed once
+// (avoids a race at page load) — it must NOT be used as "get the current user", since
+// after any later login/logout currentUser changes but the promise's resolved value doesn't.
+async function ensureAuth() {
+  await authReadyPromise;
+  return currentUser;
 }
 
 function showOnlineIdlePanel() {

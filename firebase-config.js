@@ -9,7 +9,7 @@ import {
   getAuth, onAuthStateChanged, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   GoogleAuthProvider, signInWithPopup, signOut, updateProfile,
-  linkWithCredential, EmailAuthProvider, signInWithCredential,
+  linkWithCredential, linkWithPopup, EmailAuthProvider, signInWithCredential,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import {
@@ -35,7 +35,7 @@ export {
   onAuthStateChanged, signInAnonymously,
   createUserWithEmailAndPassword, signInWithEmailAndPassword,
   GoogleAuthProvider, signInWithPopup, signOut, updateProfile,
-  linkWithCredential, EmailAuthProvider, signInWithCredential,
+  linkWithCredential, linkWithPopup, EmailAuthProvider, signInWithCredential,
   doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
   collection, addDoc, query, where, orderBy, limit, getDocs,
   arrayUnion, serverTimestamp, runTransaction, increment,
