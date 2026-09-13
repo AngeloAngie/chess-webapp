@@ -1639,22 +1639,30 @@ addFriendInput.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter') addFriendBtn.click();
 });
 
-async function resolveOnlineOpponent(data) {
-  onlineOpponentUid = onlineMyColor === 'w' ? data.players.b : data.players.w;
-  onlineOpponentUsername = null;
+function resolveOnlineOpponent(data) {
+  const opponentColor = onlineMyColor === 'w' ? 'b' : 'w';
+  onlineOpponentUid = data.players[opponentColor];
+  onlineOpponentUsername = data.displayNames ? data.displayNames[opponentColor] : null;
+  onlineConnectedText.textContent =
+    `Verbonden met ${onlineOpponentUsername || 'je tegenstander'}! Jij speelt ${onlineMyColor === 'w' ? 'wit' : 'zwart'}.`;
   addOpponentFriendBtn.classList.add('hidden');
+
   if (!onlineOpponentUid || !currentUser || currentUser.isAnonymous) return;
-  try {
-    const snap = await getDoc(doc(db, 'users', onlineOpponentUid));
-    if (!snap.exists()) return; // opponent is a guest — nothing to add
-    onlineOpponentUsername = snap.data().username;
-    const alreadyFriends = await getDoc(doc(db, 'users', currentUser.uid, 'friends', onlineOpponentUid));
-    if (!alreadyFriends.exists()) {
-      addOpponentFriendBtn.classList.remove('hidden');
+  // A guest opponent has no users/{uid} profile, so there's nothing permanent to
+  // befriend — only offer the button once we've confirmed a real account exists.
+  (async () => {
+    try {
+      const snap = await getDoc(doc(db, 'users', onlineOpponentUid));
+      if (!snap.exists()) return;
+      onlineOpponentUsername = snap.data().username; // prefer the canonical username for the friend record
+      const alreadyFriends = await getDoc(doc(db, 'users', currentUser.uid, 'friends', onlineOpponentUid));
+      if (!alreadyFriends.exists()) {
+        addOpponentFriendBtn.classList.remove('hidden');
+      }
+    } catch (e) {
+      console.error('Kon tegenstander niet controleren voor vriendschap', e);
     }
-  } catch (e) {
-    console.error('Kon tegenstander niet ophalen', e);
-  }
+  })();
 }
 
 addOpponentFriendBtn.addEventListener('click', async () => {
@@ -1774,6 +1782,17 @@ function showOnlineConnectedPanel() {
   leaveOnlineBtn.classList.remove('hidden');
 }
 
+function getMyDisplayName() {
+  if (currentUserProfile) return currentUserProfile.username;
+  let name = null;
+  try { name = sessionStorage.getItem('chess.guestName'); } catch (e) { /* ignore */ }
+  if (!name) {
+    name = 'Gast' + Math.floor(1000 + Math.random() * 9000);
+    try { sessionStorage.setItem('chess.guestName', name); } catch (e) { /* ignore */ }
+  }
+  return name;
+}
+
 async function createOnlineGame() {
   createInviteBtn.disabled = true;
   try {
@@ -1781,6 +1800,7 @@ async function createOnlineGame() {
     const newDocRef = await addDoc(collection(db, 'games'), {
       hostUid: user.uid,
       players: { w: user.uid, b: null },
+      displayNames: { w: getMyDisplayName(), b: null },
       moves: [],
       status: 'waiting',
       result: null,
@@ -1819,7 +1839,7 @@ async function joinOnlineGame(gameId) {
     } else if (data.players.b === user.uid) {
       onlineMyColor = 'b';
     } else if (!data.players.b) {
-      await updateDoc(ref, { 'players.b': user.uid, status: 'active' });
+      await updateDoc(ref, { 'players.b': user.uid, 'displayNames.b': getMyDisplayName(), status: 'active' });
       onlineMyColor = 'b';
     } else {
       alert('Deze partij is al vol.');
@@ -1836,9 +1856,14 @@ async function joinOnlineGame(gameId) {
   }
 }
 
+function updateBoardOrientation() {
+  boardEl.classList.toggle('flipped', mode === 'online' && onlineMyColor === 'b');
+}
+
 function attachOnlineListener(gameId) {
   if (onlineUnsubscribe) onlineUnsubscribe();
   onlineAppliedMoveCount = 0;
+  updateBoardOrientation();
   onlineUnsubscribe = onSnapshot(gameDocRef(gameId), (snap) => {
     if (!snap.exists()) return;
     handleOnlineGameUpdate(snap.data());
@@ -1856,7 +1881,6 @@ function handleOnlineGameUpdate(data) {
 
   if (onlineStatus !== 'active' && data.status !== 'finished') {
     onlineStatus = 'active';
-    onlineConnectedText.textContent = `Verbonden! Jij speelt ${onlineMyColor === 'w' ? 'wit' : 'zwart'}.`;
     showOnlineConnectedPanel();
     resolveOnlineOpponent(data);
   }
@@ -1951,12 +1975,14 @@ async function writeMatchRecords(gameId, data) {
     getDoc(doc(db, 'users', bUid)),
   ]);
 
+  const guestName = (color) => (data.displayNames && data.displayNames[color]) || 'Gast';
+
   const writes = [];
   // Guests (no users/{uid} profile) don't get match history / stats — only real accounts do.
   if (wProfileSnap.exists()) {
     writes.push(setDoc(doc(db, 'users', wUid, 'appliedGames', gameId), {
       opponentUid: bUid,
-      opponentUsername: bProfileSnap.exists() ? bProfileSnap.data().username : 'Gast',
+      opponentUsername: bProfileSnap.exists() ? bProfileSnap.data().username : guestName('b'),
       myColor: 'w',
       result: outcomeFor('w'),
       moves: data.moves,
@@ -1966,7 +1992,7 @@ async function writeMatchRecords(gameId, data) {
   if (bProfileSnap.exists()) {
     writes.push(setDoc(doc(db, 'users', bUid, 'appliedGames', gameId), {
       opponentUid: wUid,
-      opponentUsername: wProfileSnap.exists() ? wProfileSnap.data().username : 'Gast',
+      opponentUsername: wProfileSnap.exists() ? wProfileSnap.data().username : guestName('w'),
       myColor: 'b',
       result: outcomeFor('b'),
       moves: data.moves,
@@ -1989,6 +2015,7 @@ function leaveOnlineGame() {
   onlineOpponentUsername = null;
   addOpponentFriendBtn.classList.add('hidden');
   addOpponentFriendBtn.textContent = '+ Vriend toevoegen';
+  updateBoardOrientation();
   const url = new URL(window.location.href);
   url.searchParams.delete('game');
   window.history.replaceState({}, '', url.toString());

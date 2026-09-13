@@ -225,6 +225,19 @@ main {
   animation: popIn 0.3s ease;
 }
 
+/* Flipping the whole board 180° puts Black's side at the bottom for a player
+   who's playing Black online; counter-rotating the pieces/labels keeps their
+   glyphs upright while their position still follows the flip. */
+.board.flipped {
+  transform: rotate(180deg);
+}
+
+.board.flipped .piece-token,
+.board.flipped .file-label,
+.board.flipped .rank-label {
+  transform: rotate(180deg);
+}
+
 @keyframes popIn {
   0% { transform: scale(1); }
   50% { transform: scale(1.35); }
