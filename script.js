@@ -1418,6 +1418,7 @@ const AUTH_ERROR_MESSAGES_NL = {
   'auth/weak-password': 'Wachtwoord moet minstens 6 tekens zijn.',
   'auth/popup-closed-by-user': 'Google-login geannuleerd.',
   'auth/popup-blocked': 'Je browser blokkeerde het Google-inlogvenster. Sta pop-ups toe voor deze site en probeer opnieuw.',
+  'auth/account-exists-with-different-credential': 'Dit e-mailadres heeft al een account met een wachtwoord (geen Google). Log in met e-mailadres en wachtwoord.',
   'auth/network-request-failed': 'Netwerkfout. Probeer het opnieuw.',
 };
 
@@ -1548,6 +1549,15 @@ async function loginWithEmail(email, password) {
   return result.user;
 }
 
+// Every visitor is anonymous by default (guest mode), so a Google login almost
+// always starts as an attempt to *link* Google to that anonymous session. If
+// this Google account was already used before (a previous session/browser,
+// or it already has a password-based account with the same email), Firebase
+// refuses the link — inconsistently, as either 'credential-already-in-use' or
+// 'email-already-in-use' depending on the exact conflict. Both mean the same
+// thing here: stop trying to link, just sign straight into the existing account.
+const GOOGLE_LINK_CONFLICT_CODES = ['auth/credential-already-in-use', 'auth/email-already-in-use'];
+
 async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   const current = auth.currentUser;
@@ -1559,7 +1569,7 @@ async function signInWithGoogle() {
     const result = await signInWithPopup(auth, provider);
     return result.user;
   } catch (e) {
-    if (e.code === 'auth/credential-already-in-use') {
+    if (GOOGLE_LINK_CONFLICT_CODES.includes(e.code)) {
       const result = await signInWithPopup(auth, provider);
       return result.user;
     }
