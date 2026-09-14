@@ -8,6 +8,25 @@ import {
   arrayUnion, serverTimestamp, runTransaction,
 } from './firebase-config.js';
 
+// ==================== In-app browser detection ====================
+// Instagram/WhatsApp/TikTok/etc. open links in an embedded WebView that
+// (a) often fails to persist Firebase Auth sessions across page loads, which
+// is what causes "deze partij is al vol" when someone reopens an invite link
+// and silently gets a brand-new anonymous identity, and (b) Google actively
+// refuses OAuth logins from inside known in-app browsers as a security
+// policy — neither of which this app can work around from inside that
+// WebView. The best we can do is tell the user to escape to a real browser.
+(function warnIfInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  const isInAppBrowser = /Instagram|FBAN|FBAV|FB_IAB|Line\/|MicroMessenger|TikTok|Snapchat|GSA\/|LinkedInApp/i.test(ua);
+  if (!isInAppBrowser) return;
+  const banner = document.getElementById('inAppBrowserWarning');
+  banner.classList.remove('hidden');
+  document.getElementById('dismissInAppWarningBtn').addEventListener('click', () => {
+    banner.classList.add('hidden');
+  });
+})();
+
 // ==================== Chess engine (board, rules, move generation) ====================
 
 const FILES = 'abcdefgh';

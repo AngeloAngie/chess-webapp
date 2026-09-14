@@ -890,6 +890,28 @@ main {
 
 .incoming-invite-banner.hidden { display: none; }
 
+.in-app-browser-warning {
+  background: #5a3a12;
+  color: #ffe4b0;
+  padding: 10px 40px 10px 14px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  position: relative;
+  text-align: center;
+}
+
+.in-app-browser-warning.hidden { display: none; }
+
+.in-app-browser-warning button {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  color: #ffe4b0;
+  font-size: 1.1rem;
+  padding: 2px 8px;
+}
+
 .incoming-invite-banner button {
   padding: 5px 12px;
   font-size: 0.8rem;
