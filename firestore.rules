@@ -79,8 +79,41 @@ service cloud.firestore {
         allow create: if request.auth != null &&
           (request.auth.uid == uid || request.auth.uid == friendUid) &&
           request.resource.data.username is string;
-        allow delete: if request.auth != null && request.auth.uid == uid;
+        // Removing a friendship deletes both sides in one action, so either
+        // the list owner or the specific friend referenced by this entry can
+        // delete it.
+        allow delete: if request.auth != null &&
+          (request.auth.uid == uid || request.auth.uid == friendUid);
         allow update: if false;
+      }
+
+      // A friend can drop a game invite into your inbox; only you can read,
+      // update (accept/decline) or clear your own inbox.
+      match /invites/{inviteId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null && request.resource.data.fromUid == request.auth.uid;
+        allow update: if request.auth != null && request.auth.uid == uid;
+        allow delete: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // Direct messages between two friends, readable/writable by either
+    // participant even while the other is offline. conversationId is the two
+    // uids sorted and joined with "_", so it's derivable by both sides.
+    match /conversations/{conversationId} {
+      allow read, update: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null &&
+        request.auth.uid in request.resource.data.participants &&
+        request.resource.data.participants.size() == 2;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if request.auth != null &&
+          request.resource.data.senderUid == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow update, delete: if false;
       }
     }
 

@@ -849,6 +849,67 @@ main {
   padding: 3px 9px;
   font-size: 0.72rem;
   background: #7a2e3a;
+  white-space: nowrap;
+}
+
+.friend-row button:nth-of-type(1) { background: var(--accent); }
+.friend-row button:nth-of-type(2) { background: #3a3a45; }
+
+.online-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+}
+
+.online-dot.online {
+  background: #4caf7d;
+  box-shadow: 0 0 4px #4caf7d;
+}
+
+/* ==================== Incoming invite banner ==================== */
+
+.incoming-invite-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-width: 92vw;
+  font-size: 0.85rem;
+}
+
+.incoming-invite-banner.hidden { display: none; }
+
+.incoming-invite-banner button {
+  padding: 5px 12px;
+  font-size: 0.8rem;
+}
+
+#acceptInviteBtn { background: #2e7d4f; }
+#declineInviteBtn { background: #3a3a45; }
+
+/* ==================== Direct messages ==================== */
+
+.dm-box { width: min(92vw, 420px); }
+.dm-box h2 { font-size: 1rem; margin-bottom: 12px; text-align: center; }
+
+.dm-messages {
+  max-height: 280px;
+  min-height: 120px;
+  background: #1a1a22;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
 }
 
 #addOpponentFriendBtn.hidden { display: none; }
@@ -872,6 +933,8 @@ main {
 
 #resignBtn { background: #7a2e3a; }
 #offerDrawBtn { background: #3a3a45; }
+#newRematchBtn { background: #2e7d4f; }
+#newRematchBtn.hidden { display: none; }
 
 .draw-offer-banner {
   margin-top: 8px;

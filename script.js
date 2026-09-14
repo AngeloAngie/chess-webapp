@@ -694,6 +694,11 @@ let currentUser = null; // Firebase auth user (anonymous or real)
 let currentUserProfile = null; // Firestore users/{uid} doc data, once loaded (null for guests)
 let authReadyPromise = null;
 let authMode = 'login'; // 'login' | 'register', which tab the auth modal is showing
+let presenceInterval = null;
+let invitesUnsubscribe = null;
+let dmUnsubscribe = null;
+let dmOtherUid = null;
+let dmOtherName = null;
 
 // Online multiplayer state
 let onlineGameId = null;
@@ -735,10 +740,21 @@ const chatForm = document.getElementById('chatForm');
 const chatInput = document.getElementById('chatInput');
 const resignBtn = document.getElementById('resignBtn');
 const offerDrawBtn = document.getElementById('offerDrawBtn');
+const newRematchBtn = document.getElementById('newRematchBtn');
 const drawOfferPendingText = document.getElementById('drawOfferPendingText');
 const drawOfferBanner = document.getElementById('drawOfferBanner');
 const acceptDrawBtn = document.getElementById('acceptDrawBtn');
 const declineDrawBtn = document.getElementById('declineDrawBtn');
+const incomingInviteBanner = document.getElementById('incomingInviteBanner');
+const incomingInviteText = document.getElementById('incomingInviteText');
+const acceptInviteBtn = document.getElementById('acceptInviteBtn');
+const declineInviteBtn = document.getElementById('declineInviteBtn');
+const dmModal = document.getElementById('dmModal');
+const dmTitle = document.getElementById('dmTitle');
+const dmMessagesEl = document.getElementById('dmMessages');
+const dmForm = document.getElementById('dmForm');
+const dmInput = document.getElementById('dmInput');
+const closeDmBtn = document.getElementById('closeDmBtn');
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
 const soundBtn = document.getElementById('soundBtn');
@@ -1386,6 +1402,11 @@ offerDrawBtn.addEventListener('click', offerDraw);
 acceptDrawBtn.addEventListener('click', () => respondToDrawOffer(true));
 declineDrawBtn.addEventListener('click', () => respondToDrawOffer(false));
 
+newRematchBtn.addEventListener('click', () => {
+  newRematchBtn.classList.add('hidden');
+  createOnlineGame();
+});
+
 // ==================== Authentication ====================
 
 const AUTH_ERROR_MESSAGES_NL = {
@@ -1416,6 +1437,8 @@ async function handleUserSignedIn(user) {
   if (user.isAnonymous) {
     currentUserProfile = null;
     renderAuthUI();
+    stopPresenceHeartbeat();
+    stopInvitesListener();
     return;
   }
 
@@ -1429,6 +1452,8 @@ async function handleUserSignedIn(user) {
       renderAuthUI();
       openUsernameModal();
     }
+    startPresenceHeartbeat();
+    startInvitesListener(user.uid);
   } catch (e) {
     console.error('Kon gebruikersprofiel niet laden', e);
     renderAuthUI();
@@ -1644,6 +1669,8 @@ logoutBtn.addEventListener('click', async () => {
     showOnlineIdlePanel();
   }
   currentUserProfile = null;
+  stopPresenceHeartbeat();
+  stopInvitesListener();
   await signOut(auth);
 });
 
@@ -1874,6 +1901,9 @@ async function loadAndRenderFriends() {
     const li = document.createElement('li');
     li.className = 'friend-row';
 
+    const dot = document.createElement('span');
+    dot.className = 'online-dot';
+
     const name = document.createElement('span');
     name.className = 'friend-name';
     name.textContent = friend.username;
@@ -1882,19 +1912,34 @@ async function loadAndRenderFriends() {
     record.className = 'friend-record';
     record.textContent = '…';
 
+    const inviteBtn = document.createElement('button');
+    inviteBtn.textContent = 'Uitnodigen';
+    inviteBtn.addEventListener('click', () => inviteFriendToGame(friend));
+
+    const messageBtn = document.createElement('button');
+    messageBtn.textContent = 'Bericht';
+    messageBtn.addEventListener('click', () => openDmModal(friend.uid, friend.username));
+
     const removeBtn = document.createElement('button');
     removeBtn.textContent = 'Verwijder';
     removeBtn.addEventListener('click', async () => {
-      await deleteDoc(doc(db, 'users', currentUser.uid, 'friends', friend.uid));
+      await Promise.all([
+        deleteDoc(doc(db, 'users', currentUser.uid, 'friends', friend.uid)),
+        deleteDoc(doc(db, 'users', friend.uid, 'friends', currentUser.uid)).catch(() => {}),
+      ]);
       loadAndRenderFriends();
     });
 
-    li.append(name, record, removeBtn);
+    li.append(dot, name, record, inviteBtn, messageBtn, removeBtn);
     friendsList.appendChild(li);
 
     fetchHeadToHead(friend.uid).then((r) => {
       record.textContent = `${r.wins}-${r.losses}-${r.draws}`;
     });
+    getDoc(doc(db, 'users', friend.uid)).then((snap) => {
+      const lastActiveAt = snap.exists() ? snap.data().lastActiveAt : null;
+      dot.classList.toggle('online', isRecentlyActive(lastActiveAt));
+    }).catch(() => {});
   }
 }
 
@@ -2038,6 +2083,174 @@ replayNextBtn.addEventListener('click', () => {
 });
 closeReplayBtn.addEventListener('click', closeReplay);
 
+// ==================== Presence ====================
+
+const ONLINE_THRESHOLD_MS = 35000;
+
+function isRecentlyActive(lastActiveAt) {
+  if (!lastActiveAt || !lastActiveAt.toDate) return false;
+  return (Date.now() - lastActiveAt.toDate().getTime()) < ONLINE_THRESHOLD_MS;
+}
+
+async function updateMyPresence() {
+  if (!currentUser || currentUser.isAnonymous) return;
+  try {
+    await updateDoc(doc(db, 'users', currentUser.uid), { lastActiveAt: serverTimestamp() });
+  } catch (e) {
+    // Non-critical — just skip this heartbeat.
+  }
+}
+
+function onVisibilityChangeForPresence() {
+  if (document.visibilityState === 'visible') updateMyPresence();
+}
+
+function startPresenceHeartbeat() {
+  stopPresenceHeartbeat();
+  updateMyPresence();
+  presenceInterval = setInterval(updateMyPresence, 20000);
+  document.addEventListener('visibilitychange', onVisibilityChangeForPresence);
+}
+
+function stopPresenceHeartbeat() {
+  if (presenceInterval) {
+    clearInterval(presenceInterval);
+    presenceInterval = null;
+  }
+  document.removeEventListener('visibilitychange', onVisibilityChangeForPresence);
+}
+
+// ==================== Game invites (to a specific friend) ====================
+
+function startInvitesListener(uid) {
+  stopInvitesListener();
+  const q = query(collection(db, 'users', uid, 'invites'), where('status', '==', 'pending'));
+  invitesUnsubscribe = onSnapshot(q, (snap) => {
+    snap.docChanges().forEach((change) => {
+      if (change.type === 'added') {
+        showIncomingInvite({ id: change.doc.id, ...change.doc.data() });
+      }
+    });
+  }, (e) => console.error('Invites listener error', e));
+}
+
+function stopInvitesListener() {
+  if (invitesUnsubscribe) {
+    invitesUnsubscribe();
+    invitesUnsubscribe = null;
+  }
+}
+
+function showIncomingInvite(invite) {
+  incomingInviteText.textContent = `${invite.fromUsername} nodigt je uit voor een partij!`;
+  incomingInviteBanner.dataset.inviteId = invite.id;
+  incomingInviteBanner.dataset.gameId = invite.gameId;
+  incomingInviteBanner.classList.remove('hidden');
+}
+
+acceptInviteBtn.addEventListener('click', async () => {
+  const gameId = incomingInviteBanner.dataset.gameId;
+  const inviteId = incomingInviteBanner.dataset.inviteId;
+  incomingInviteBanner.classList.add('hidden');
+  updateDoc(doc(db, 'users', currentUser.uid, 'invites', inviteId), { status: 'accepted' }).catch(() => {});
+  modeSelect.value = 'online';
+  modeSelect.dispatchEvent(new Event('change'));
+  onlinePanel.classList.remove('hidden');
+  showOnlineWaitingPanel();
+  await joinOnlineGame(gameId);
+});
+
+declineInviteBtn.addEventListener('click', () => {
+  const inviteId = incomingInviteBanner.dataset.inviteId;
+  incomingInviteBanner.classList.add('hidden');
+  updateDoc(doc(db, 'users', currentUser.uid, 'invites', inviteId), { status: 'declined' }).catch(() => {});
+});
+
+async function inviteFriendToGame(friend) {
+  closeProfileModal();
+  modeSelect.value = 'online';
+  modeSelect.dispatchEvent(new Event('change'));
+  await createOnlineGame(friend);
+}
+
+// ==================== Direct messages (offline-capable) ====================
+
+function conversationIdFor(otherUid) {
+  return [currentUser.uid, otherUid].sort().join('_');
+}
+
+function renderDmMessage(msg) {
+  const li = document.createElement('li');
+  li.className = 'chat-message' + (msg.senderUid === currentUser.uid ? ' own' : '');
+  const sender = document.createElement('span');
+  sender.className = 'chat-sender';
+  sender.textContent = (msg.senderUid === currentUser.uid ? 'Jij' : dmOtherName) + ':';
+  li.appendChild(sender);
+  li.appendChild(document.createTextNode(' ' + msg.text));
+  dmMessagesEl.appendChild(li);
+  dmMessagesEl.scrollTop = dmMessagesEl.scrollHeight;
+}
+
+async function openDmModal(friendUid, friendUsername) {
+  dmOtherUid = friendUid;
+  dmOtherName = friendUsername;
+  dmTitle.textContent = `Bericht aan ${friendUsername}`;
+  dmMessagesEl.innerHTML = '';
+  dmModal.classList.remove('hidden');
+
+  const convId = conversationIdFor(friendUid);
+  try {
+    // Deliberately not preceded by a getDoc() existence check: the read rule
+    // for this doc requires resource.data.participants, which throws
+    // permission-denied on a not-yet-existing doc rather than just missing —
+    // so a pre-read would always fail on the very first conversation. A plain
+    // setDoc is safe either way: same content if it already exists (evaluated
+    // as an allowed "update"), or creates it fresh (evaluated as "create").
+    const convRef = doc(db, 'conversations', convId);
+    await setDoc(convRef, { participants: [currentUser.uid, friendUid], updatedAt: serverTimestamp() });
+    if (dmUnsubscribe) dmUnsubscribe();
+    const q = query(collection(db, 'conversations', convId, 'messages'), orderBy('at', 'asc'), limit(100));
+    dmUnsubscribe = onSnapshot(q, (snap) => {
+      dmMessagesEl.innerHTML = '';
+      snap.docs.forEach((d) => renderDmMessage(d.data()));
+    });
+  } catch (e) {
+    console.error('Kon gesprek niet laden', e);
+  }
+}
+
+function closeDmModal() {
+  dmModal.classList.add('hidden');
+  if (dmUnsubscribe) {
+    dmUnsubscribe();
+    dmUnsubscribe = null;
+  }
+  dmOtherUid = null;
+}
+
+closeDmBtn.addEventListener('click', closeDmModal);
+
+dmForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const text = dmInput.value.trim();
+  dmInput.value = '';
+  if (!text || !dmOtherUid) return;
+  const convId = conversationIdFor(dmOtherUid);
+  try {
+    await addDoc(collection(db, 'conversations', convId, 'messages'), {
+      senderUid: currentUser.uid,
+      text: text.slice(0, 500),
+      at: Date.now(),
+    });
+    await updateDoc(doc(db, 'conversations', convId), {
+      updatedAt: serverTimestamp(),
+      lastMessageText: text.slice(0, 100),
+    });
+  } catch (e) {
+    console.error('Kon bericht niet versturen', e);
+  }
+});
+
 // ==================== Online multiplayer (Firestore) ====================
 
 function gameDocRef(id) {
@@ -2085,7 +2298,7 @@ function getMyDisplayName() {
   return name;
 }
 
-async function createOnlineGame() {
+async function createOnlineGame(inviteFriend) {
   createInviteBtn.disabled = true;
   try {
     const user = await ensureAuth();
@@ -2111,6 +2324,16 @@ async function createOnlineGame() {
     resetLocalBoard();
     showOnlineWaitingPanel();
     attachOnlineListener(onlineGameId);
+
+    if (inviteFriend) {
+      await addDoc(collection(db, 'users', inviteFriend.uid, 'invites'), {
+        fromUid: user.uid,
+        fromUsername: getMyDisplayName(),
+        gameId: onlineGameId,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+    }
   } catch (e) {
     console.error('Kon geen online partij aanmaken', e);
     alert('Kon geen online partij aanmaken. Probeer het opnieuw.');
@@ -2130,6 +2353,16 @@ async function joinOnlineGame(gameId) {
       return;
     }
     const data = snap.data();
+
+    // Distinguish "this specific invite link was already used to finish a game"
+    // from "someone else is already in this seat" — the old generic "vol" message
+    // covered both and confused people trying to replay the same link after a game.
+    if (data.status === 'finished' && data.players.w !== user.uid && data.players.b !== user.uid) {
+      alert('Deze partij is al afgelopen. Vraag je vriend om een nieuwe uitnodigingslink (de knop "Nieuwe partij" verschijnt zodra een partij eindigt).');
+      showOnlineIdlePanel();
+      return;
+    }
+
     if (data.players.w === user.uid) {
       onlineMyColor = 'w';
     } else if (data.players.b === user.uid) {
@@ -2138,7 +2371,7 @@ async function joinOnlineGame(gameId) {
       await updateDoc(ref, { 'players.b': user.uid, 'displayNames.b': getMyDisplayName(), status: 'active' });
       onlineMyColor = 'b';
     } else {
-      alert('Deze partij is al vol.');
+      alert('Deze partij heeft al twee spelers. Vraag je vriend om een nieuwe uitnodigingslink.');
       showOnlineIdlePanel();
       return;
     }
@@ -2187,6 +2420,7 @@ function handleOnlineGameUpdate(data) {
     if (timeControl) startClockTick();
     resignBtn.disabled = false;
     offerDrawBtn.disabled = false;
+    newRematchBtn.classList.add('hidden');
   }
 
   const moves = data.moves || [];
@@ -2209,6 +2443,7 @@ function handleOnlineGameUpdate(data) {
     onlineStatus = 'finished';
     resignBtn.disabled = true;
     offerDrawBtn.disabled = true;
+    newRematchBtn.classList.remove('hidden');
     drawOfferPendingText.classList.add('hidden');
     drawOfferBanner.classList.add('hidden');
     if (!gameOver) {
@@ -2352,7 +2587,7 @@ function leaveOnlineGame() {
   window.history.replaceState({}, '', url.toString());
 }
 
-createInviteBtn.addEventListener('click', createOnlineGame);
+createInviteBtn.addEventListener('click', () => createOnlineGame());
 
 copyInviteBtn.addEventListener('click', async () => {
   inviteLinkInput.select();

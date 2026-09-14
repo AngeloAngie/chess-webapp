@@ -7,6 +7,12 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="incomingInviteBanner" class="incoming-invite-banner hidden">
+    <span id="incomingInviteText"></span>
+    <button id="acceptInviteBtn" type="button">Accepteren</button>
+    <button id="declineInviteBtn" type="button">Negeren</button>
+  </div>
+
   <div class="app">
     <header>
       <div class="title-row">
@@ -109,6 +115,7 @@
             <div class="game-action-row">
               <button id="resignBtn" type="button">Opgeven</button>
               <button id="offerDrawBtn" type="button">Remise aanbieden</button>
+              <button id="newRematchBtn" type="button" class="hidden">Nieuwe partij</button>
             </div>
             <p id="drawOfferPendingText" class="online-status-text hidden">Remise aangeboden, wachten op antwoord…</p>
             <div id="drawOfferBanner" class="draw-offer-banner hidden">
@@ -240,6 +247,18 @@
         <span id="replayPlyLabel"></span>
         <button id="replayNextBtn">▶</button>
       </div>
+    </div>
+  </div>
+
+  <div id="dmModal" class="overlay hidden">
+    <div class="auth-box dm-box">
+      <button id="closeDmBtn" class="modal-close" title="Sluiten">×</button>
+      <h2 id="dmTitle"></h2>
+      <ol id="dmMessages" class="chat-messages dm-messages"></ol>
+      <form id="dmForm" class="chat-form">
+        <input type="text" id="dmInput" placeholder="Typ een bericht…" maxlength="500" autocomplete="off">
+        <button type="submit">Stuur</button>
+      </form>
     </div>
   </div>
 
