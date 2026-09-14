@@ -727,6 +727,7 @@ let onlineAppliedMoveCount = 0;
 let onlineStatus = 'idle'; // 'idle' | 'waiting' | 'active' | 'finished'
 let onlineOpponentUid = null;
 let onlineOpponentUsername = null;
+let pendingJoinGameId = null;
 let chatRenderedCount = 0;
 
 // Time controls
@@ -788,6 +789,9 @@ const onlineConnected = document.getElementById('onlineConnected');
 const onlineConnectedText = document.getElementById('onlineConnectedText');
 const inviteLinkInput = document.getElementById('inviteLinkInput');
 const createInviteBtn = document.getElementById('createInviteBtn');
+const onlineJoinConfirm = document.getElementById('onlineJoinConfirm');
+const onlineJoinConfirmText = document.getElementById('onlineJoinConfirmText');
+const confirmJoinBtn = document.getElementById('confirmJoinBtn');
 const copyInviteBtn = document.getElementById('copyInviteBtn');
 const leaveOnlineBtn = document.getElementById('leaveOnlineBtn');
 const authArea = document.getElementById('authArea');
@@ -2297,6 +2301,15 @@ async function ensureAuth() {
 function showOnlineIdlePanel() {
   onlineStatus = 'idle';
   onlineIdle.classList.remove('hidden');
+  onlineJoinConfirm.classList.add('hidden');
+  onlineWaiting.classList.add('hidden');
+  onlineConnected.classList.add('hidden');
+  leaveOnlineBtn.classList.add('hidden');
+}
+
+function showOnlineJoinConfirmPanel() {
+  onlineIdle.classList.add('hidden');
+  onlineJoinConfirm.classList.remove('hidden');
   onlineWaiting.classList.add('hidden');
   onlineConnected.classList.add('hidden');
   leaveOnlineBtn.classList.add('hidden');
@@ -2304,6 +2317,7 @@ function showOnlineIdlePanel() {
 
 function showOnlineWaitingPanel() {
   onlineIdle.classList.add('hidden');
+  onlineJoinConfirm.classList.add('hidden');
   onlineWaiting.classList.remove('hidden');
   onlineConnected.classList.add('hidden');
   leaveOnlineBtn.classList.remove('hidden');
@@ -2311,6 +2325,7 @@ function showOnlineWaitingPanel() {
 
 function showOnlineConnectedPanel() {
   onlineIdle.classList.add('hidden');
+  onlineJoinConfirm.classList.add('hidden');
   onlineWaiting.classList.add('hidden');
   onlineConnected.classList.remove('hidden');
   leaveOnlineBtn.classList.remove('hidden');
@@ -2370,6 +2385,62 @@ async function createOnlineGame(inviteFriend) {
     createInviteBtn.disabled = false;
   }
 }
+
+// Used only for the passive ?game=<id> URL entry point (someone opened a
+// shared link). This deliberately does NOT claim the seat by itself — it
+// only reads the game and shows a confirmation step. Auto-joining on page
+// load meant simply opening the same link from a second browser/tab (or an
+// in-app browser like Instagram's, which can silently reopen the link with a
+// fresh identity) could use up the only open seat before the intended person
+// ever got there, causing a confusing "deze partij is al vol". Explicitly
+// tapping "Deelnemen" is what actually claims it, via joinOnlineGame below.
+async function previewInviteGame(gameId) {
+  try {
+    const user = await ensureAuth();
+    const snap = await getDoc(gameDocRef(gameId));
+    if (!snap.exists()) {
+      alert('Deze uitnodiging bestaat niet (meer).');
+      showOnlineIdlePanel();
+      return;
+    }
+    const data = snap.data();
+
+    // Already a participant (the host reopening their own link, or genuinely
+    // rejoining a game in progress) — reattach directly, no need to confirm.
+    if (data.players.w === user.uid || data.players.b === user.uid) {
+      await joinOnlineGame(gameId);
+      return;
+    }
+
+    if (data.status === 'finished') {
+      alert('Deze partij is al afgelopen. Vraag je vriend om een nieuwe uitnodigingslink.');
+      showOnlineIdlePanel();
+      return;
+    }
+    if (data.players.b) {
+      alert('Deze partij heeft al twee spelers. Vraag je vriend om een nieuwe uitnodigingslink.');
+      showOnlineIdlePanel();
+      return;
+    }
+
+    pendingJoinGameId = gameId;
+    const hostName = (data.displayNames && data.displayNames.w) || 'Iemand';
+    onlineJoinConfirmText.textContent = `${hostName} nodigt je uit voor een partij!`;
+    showOnlineJoinConfirmPanel();
+  } catch (e) {
+    console.error('Kon uitnodiging niet laden', e);
+    alert('Kon de uitnodiging niet laden. Probeer het opnieuw.');
+    showOnlineIdlePanel();
+  }
+}
+
+confirmJoinBtn.addEventListener('click', () => {
+  if (pendingJoinGameId) {
+    const gameId = pendingJoinGameId;
+    pendingJoinGameId = null;
+    joinOnlineGame(gameId);
+  }
+});
 
 async function joinOnlineGame(gameId) {
   try {
@@ -2754,8 +2825,7 @@ if (inviteGameId) {
   undoBtn.disabled = true;
   redoBtn.disabled = true;
   onlinePanel.classList.remove('hidden');
-  showOnlineWaitingPanel();
-  joinOnlineGame(inviteGameId);
+  previewInviteGame(inviteGameId);
 } else if (mode === 'ai' && game.turn !== humanSide) {
   setTimeout(makeAiMove, 300);
 }

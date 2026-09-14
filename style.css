@@ -454,9 +454,12 @@ main {
 
 .online-panel.hidden { display: none; }
 #onlineIdle.hidden,
+#onlineJoinConfirm.hidden,
 #onlineWaiting.hidden,
 #onlineConnected.hidden,
 #leaveOnlineBtn.hidden { display: none; }
+
+#confirmJoinBtn { margin-top: 4px; }
 
 .online-panel p { margin: 0 0 6px; color: var(--text); }
 
